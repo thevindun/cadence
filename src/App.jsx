@@ -24,25 +24,30 @@ import Notifications from './components/Notifications.jsx'
 import Inbox from './components/Inbox.jsx'
 import { Inbox as InboxIcon } from 'lucide-react'
 import { API, waitForServer } from './core/api.js'
+import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
 
 const NAV = [
-  { id: 'queue', label: 'Queue', icon: ListChecks },
-  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { id: 'import', label: 'Import', icon: Upload },
-  { id: 'library', label: 'Library', icon: Images },
-  { id: 'insights', label: 'Insights', icon: BarChart3 },
-  { id: 'accounts', label: 'Accounts', icon: Plug },
-  { id: 'inbox', label: 'Inbox', icon: InboxIcon },
-
+  { id: 'queue',    path: '/queue',    label: 'Queue',    icon: ListChecks },
+  { id: 'calendar', path: '/calendar', label: 'Calendar', icon: CalendarDays },
+  { id: 'import',   path: '/import',   label: 'Import',   icon: Upload },
+  { id: 'library',  path: '/library',  label: 'Library',  icon: Images },
+  { id: 'insights', path: '/insights', label: 'Insights', icon: BarChart3 },
+  { id: 'accounts', path: '/accounts', label: 'Accounts', icon: Plug },
+  { id: 'inbox',    path: '/inbox',    label: 'Inbox',    icon: InboxIcon },
 ]
 
 export default function App() {
   const { posts, addPost, updatePost, deletePost, refreshMetrics } = usePosts()
-  const [view, setView] = useState('queue')
   const scheduledCount = posts.filter((p) => p.status === STATUS.SCHEDULED).length
-  const activeLabel = NAV.find((n) => n.id === view)?.label ?? ''
   const [editingId, setEditingId] = useState(null)
   const editing = posts.find((p) => p.id === editingId) || null
+  const location = useLocation()
+  const navigate = useNavigate()
+  const activeLabel = [...NAV, 
+    { path: '/failures', label: 'Failures' },
+    { path: '/review',   label: 'Review' },
+    { path: '/team',     label: 'Team' },
+  ].find((n) => location.pathname.startsWith(n.path))?.label ?? ''
 
   const [auth, setAuth] = useState({ state: 'loading', needsSetup: false, user: null })
 
@@ -84,10 +89,10 @@ export default function App() {
   const isAdmin = !currentUser || currentUser.role === 'admin'
   const nav = NAV.filter((n) => n.id !== 'accounts' || isAdmin)
   const failedCount = posts.filter((p) => p.status === STATUS.FAILED).length
-  nav.push({ id: 'failures', label: 'Failures', icon: AlertTriangle, badge: failedCount || null, danger: true })
+  nav.push({ id: 'failures', path: '/failures', label: 'Failures', icon: AlertTriangle, badge: failedCount || null, danger: true })
   if (isAdmin) {
-    nav.push({ id: 'review', label: 'Review', icon: ClipboardCheck, badge: pendingCount || null })
-    if (currentUser) nav.push({ id: 'team', label: 'Team', icon: Users })   // no team without auth
+    nav.push({ id: 'review', path: '/review', label: 'Review', icon: ClipboardCheck, badge: pendingCount || null })
+    if (currentUser) nav.push({ id: 'team', path: '/team', label: 'Team', icon: Users })
   }
 
   if (auth.state === 'loading')
@@ -106,28 +111,29 @@ export default function App() {
       <aside className="flex w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface">
         <div className="px-5 py-5"><Logo /></div>
         <nav className="flex flex-col gap-1 px-3">
-          {nav.map(({ id, label, icon: Icon, soon, badge, danger }) => (
-            <button key={id} onClick={() => !soon && setView(id)} disabled={soon}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition
-                ${view === id ? 'bg-coral/12 text-fg'
-                  : soon ? 'cursor-not-allowed text-muted/40'
-                    : 'text-muted hover:bg-elevated hover:text-fg'}`}>
-              <Icon size={18} strokeWidth={1.75} className={view === id ? 'text-coral' : ''} />
-              {label}
-              {badge != null && (
-                <span className={`ml-auto rounded-full px-1.5 font-mono text-[10px] text-white ${danger ? 'bg-red-500' : 'bg-coral'}`}>{badge}</span>
+          {nav.map(({ id, path, label, icon: Icon, badge, danger }) => (
+            <NavLink key={id} to={path}
+              className={({ isActive }) => `flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition
+                ${isActive ? 'bg-coral/12 text-fg' : 'text-muted hover:bg-elevated hover:text-fg'}`}>
+              {({ isActive }) => (
+                <>
+                  <Icon size={18} strokeWidth={1.75} className={isActive ? 'text-coral' : ''} />
+                  {label}
+                  {badge != null && (
+                    <span className={`ml-auto rounded-full px-1.5 font-mono text-[10px] text-white ${danger ? 'bg-red-500' : 'bg-coral'}`}>{badge}</span>
+                  )}
+                </>
               )}
-              {soon && <span className="ml-auto font-mono text-[10px] tracking-wider text-muted/40">SOON</span>}
-            </button>
+            </NavLink>
           ))}
         </nav>
         <div className="mt-auto flex flex-col gap-2 p-4">
           {isAdmin && (
 
-            <button onClick={() => setView('accounts')}
-              className="w-full rounded-lg border border-line px-3 py-2 text-sm text-muted transition hover:border-coral/40 hover:text-fg">
+            <NavLink to="/accounts"
+              className="block w-full rounded-lg border border-line px-3 py-2 text-center text-sm text-muted transition hover:border-coral/40 hover:text-fg">
               Connect account
-            </button>
+            </NavLink>
           )}
           {getToken() && (
             <button onClick={async () => { await logout(); setAuth({ state: 'login', needsSetup: false }) }}
@@ -148,27 +154,26 @@ export default function App() {
         </header>
 
         <main className="flex-1 overflow-y-auto p-8">
-          {view === 'import' && <Import accounts={importAccounts} categories={categories} onImported={() => setView('queue')} />}
-          {view === 'queue' && (
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
-              <Composer
-                editing={editing}
-                onSchedule={addPost}
-                onSaveDraft={addPost}
-                onUpdate={handleUpdate}
-                onCancelEdit={() => setEditingId(null)}
-              />
-              <Queue posts={posts} onEdit={setEditingId} onDelete={deletePost} />
-            </div>
-          )}
-          {view === 'library' && <MediaLibrary />}
-          {view === 'calendar' && <Calendar posts={posts} onReschedule={updatePost} />}
-          {view === 'insights' && <Insights posts={posts} onRefresh={refreshMetrics} />}
-          {view === 'accounts' && <Accounts />}
-          {view === 'team' && <Team currentUserId={currentUser?.id} />}
-          {view === 'review' && <Review onChange={() => { }} />}
-          {view === 'failures' && <Failures posts={posts} onDelete={deletePost} />}
-          {view === 'inbox' && <Inbox />}
+          <Routes>
+            <Route path="/" element={<Navigate to="/queue" replace />} />
+            <Route path="/queue" element={
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
+                <Composer editing={editing} onSchedule={addPost} onSaveDraft={addPost}
+                  onUpdate={handleUpdate} onCancelEdit={() => setEditingId(null)} />
+                <Queue posts={posts} onEdit={setEditingId} onDelete={deletePost} />
+              </div>
+            } />
+            <Route path="/calendar" element={<Calendar posts={posts} onReschedule={updatePost} />} />
+            <Route path="/import"   element={<Import accounts={importAccounts} categories={categories} onImported={() => {}} />} />
+            <Route path="/library"  element={<MediaLibrary />} />
+            <Route path="/insights" element={<Insights posts={posts} onRefresh={refreshMetrics} />} />
+            <Route path="/accounts" element={<Accounts />} />
+            <Route path="/inbox"    element={<Inbox />} />
+            <Route path="/failures" element={<Failures posts={posts} onDelete={deletePost} />} />
+            <Route path="/review"   element={<Review onChange={() => {}} />} />
+            <Route path="/team"     element={<Team currentUserId={currentUser?.id} />} />
+            <Route path="*" element={<Navigate to="/queue" replace />} />
+          </Routes>
         </main>
       </div>
     </div>

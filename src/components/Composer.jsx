@@ -7,6 +7,8 @@ import { useCategories } from '../core/useCategories.js'
 import { MediaPicker } from './MediaLibrary.jsx'
 import { Library } from 'lucide-react'
 import { compressImage } from '../core/imageCompress.js'
+import Collapsible from './Collapsible.jsx'
+import { Tag, Link2, Repeat } from 'lucide-react'
 
 function nowLocalInput() {
   const d = new Date(); d.setSeconds(0, 0)
@@ -24,7 +26,8 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const [activeTab, setActiveTab] = useState('all')
   const [thread, setThread] = useState([])
   const [firstComment, setFirstComment] = useState('')
-  const [fcOpen, setFcOpen] = useState(false)
+  const [panel, setPanel] = useState(null)      // 'thread' | 'category' | 'links' | null
+  const togglePanel = (id) => setPanel((p) => (p === id ? null : id))
   const [selected, setSelected] = useState({})
   const [when, setWhen] = useState(nowLocalInput())
   const [repeat, setRepeat] = useState(REPEAT.NONE)
@@ -233,46 +236,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         </div>
       )}
 
-      {thread.length > 0 && (
-        <div className="mt-3 flex flex-col gap-2 border-l-2 border-coral/30 pl-3">
-          {thread.map((seg, i) => (
-            <div key={i} className="relative">
-              <textarea value={seg} onChange={(e) => setSeg(i, e.target.value)} placeholder={`Thread part ${i + 2}…`} rows={2}
-                className="w-full resize-none rounded-lg border border-line bg-elevated px-3 py-2 pr-8 text-sm text-fg placeholder:text-muted outline-none transition focus:border-coral" />
-              <button onClick={() => delSeg(i)} className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded text-muted transition hover:text-red-400">
-                <X size={12} strokeWidth={2} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="mt-2 flex items-center gap-4">
-        <button onClick={addSeg} className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted transition hover:text-coral">
-          <Plus size={12} strokeWidth={2} /> ADD TO THREAD
-        </button>
-        <button onClick={() => setFcOpen((v) => !v)}
-          className={`inline-flex items-center gap-1.5 font-mono text-[11px] transition hover:text-coral ${fcOpen || firstComment ? 'text-coral' : 'text-muted'}`}>
-          <MessageCircle size={12} strokeWidth={2} /> FIRST COMMENT
-        </button>
-      </div>
-      {(fcOpen || firstComment) && (
-        <textarea value={firstComment} onChange={(e) => setFirstComment(e.target.value)}
-          placeholder="First comment (hashtags, links)… — Bluesky & Mastodon" rows={2}
-          className="mt-2 w-full resize-none rounded-lg border border-line bg-elevated px-3 py-2 text-sm text-fg placeholder:text-muted outline-none transition focus:border-coral" />
-      )}
-
-
-      {effTab !== 'all' && (
-        <p className="mt-2 font-mono text-[11px] text-muted">Editing {PLATFORMS[effTab]?.label} only. Thread &amp; media are shared across platforms.</p>
-      )}
-      {videoToBluesky && (
-        <p className="mt-2 font-mono text-[11px] text-muted">Bluesky video needs a verified-email account and has daily limits.</p>
-      )}
-      {threadToFlat && (
-        <p className="mt-2 font-mono text-[11px] text-muted">Threads/LinkedIn post only the first part; Bluesky &amp; Mastodon post the full chain.</p>
-      )}
-
+    {/* --- account picker: primary, stays visible --- */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {accounts.length === 0 && <span className="font-mono text-[11px] text-muted">No accounts connected — see Accounts.</span>}
         {accounts.map((a) => (
@@ -299,39 +263,79 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         <input ref={vidRef} type="file" accept="video/*" onChange={onFiles} className="hidden" />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[10px] tracking-wider text-muted">CATEGORY</span>
-        <button onClick={() => setCategory(null)}
-          className={`rounded-full border px-2 py-0.5 font-mono text-[11px] transition ${!category ? 'border-line bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>
-          None
-        </button>
-        {categories.map((c) => (
-          <button key={c.id} onClick={() => setCategory(c.id)}
-            className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] transition"
-            style={{ borderColor: category === c.id ? c.color : 'var(--color-line)', color: category === c.id ? c.color : 'var(--color-muted)' }}>
-            <span className="h-2 w-2 rounded-full" style={{ background: c.color }} /> {c.name}
+      {/* --- collapsible configuration --- */}
+      <div className="mt-4 flex flex-col gap-2">
+        <Collapsible icon={MessageCircle} label="THREAD & FIRST COMMENT"
+          active={thread.length > 0 || Boolean(firstComment)}
+          open={panel === 'thread'} onToggle={() => togglePanel('thread')}>
+          {thread.map((seg, i) => (
+            <div key={i} className="relative mb-2">
+              <textarea value={seg} onChange={(e) => setSeg(i, e.target.value)}
+                placeholder={`Thread part ${i + 2}…`} rows={2}
+                className="w-full resize-none rounded-lg border border-line bg-elevated px-3 py-2 pr-8 text-sm text-fg placeholder:text-muted outline-none transition focus:border-coral" />
+              <button onClick={() => delSeg(i)} className="absolute right-2 top-2 grid h-5 w-5 place-items-center rounded text-muted transition hover:text-red-400">
+                <X size={12} strokeWidth={2} />
+              </button>
+            </div>
+          ))}
+          <button onClick={addSeg} className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted transition hover:text-coral">
+            <Plus size={12} strokeWidth={2} /> ADD PART
           </button>
-        ))}
-        <button onClick={async () => { const n = prompt('New category name'); if (n?.trim()) { const c = await createCategory(n.trim()); if (c) setCategory(c.id) } }}
-          className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-muted transition hover:border-coral/40 hover:text-fg">
-          + New
-        </button>
-      </div>
-      
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <span className="font-mono text-[10px] tracking-wider text-muted">LINKS</span>
-        {[['off', 'Off'], ['utm', 'UTM tags'], ['tracked', 'Track clicks']].map(([id, label]) => (
-          <button key={id} onClick={() => setLinkMode(id)}
-            className={`rounded-full border px-2 py-0.5 font-mono text-[11px] transition ${linkMode === id ? 'border-coral bg-coral/12 text-coral' : 'border-line text-muted hover:text-fg'}`}>
-            {label}
-          </button>
-        ))}
-        {linkMode !== 'off' && (
-          <input value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder="campaign (optional)"
-            className="rounded-lg border border-line bg-elevated px-2 py-1 font-mono text-[11px] text-fg placeholder:text-muted outline-none transition focus:border-coral" />
-        )}
+          <textarea value={firstComment} onChange={(e) => setFirstComment(e.target.value)}
+            placeholder="First comment (hashtags, links)… — Bluesky &amp; Mastodon" rows={2}
+            className="mt-3 w-full resize-none rounded-lg border border-line bg-elevated px-3 py-2 text-sm text-fg placeholder:text-muted outline-none transition focus:border-coral" />
+        </Collapsible>
+
+        <Collapsible icon={Tag} label="CATEGORY" active={Boolean(category)}
+          open={panel === 'category'} onToggle={() => togglePanel('category')}>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={() => setCategory(null)}
+              className={`rounded-full border px-2 py-0.5 font-mono text-[11px] transition ${!category ? 'border-line bg-elevated text-fg' : 'border-line text-muted hover:text-fg'}`}>
+              None
+            </button>
+            {categories.map((c) => (
+              <button key={c.id} onClick={() => setCategory(c.id)}
+                className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] transition"
+                style={{ borderColor: category === c.id ? c.color : 'var(--color-line)', color: category === c.id ? c.color : 'var(--color-muted)' }}>
+                <span className="h-2 w-2 rounded-full" style={{ background: c.color }} /> {c.name}
+              </button>
+            ))}
+            <button onClick={async () => { const n = prompt('New category name'); if (n?.trim()) { const c = await createCategory(n.trim()); if (c) setCategory(c.id) } }}
+              className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-muted transition hover:border-coral/40 hover:text-fg">
+              + New
+            </button>
+          </div>
+        </Collapsible>
+
+        <Collapsible icon={Link2} label="LINK TRACKING" active={linkMode !== 'off'}
+          open={panel === 'links'} onToggle={() => togglePanel('links')}>
+          <div className="flex flex-wrap items-center gap-2">
+            {[['off', 'Off'], ['utm', 'UTM tags'], ['tracked', 'Track clicks']].map(([id, label]) => (
+              <button key={id} onClick={() => setLinkMode(id)}
+                className={`rounded-full border px-2 py-0.5 font-mono text-[11px] transition ${linkMode === id ? 'border-coral bg-coral/12 text-coral' : 'border-line text-muted hover:text-fg'}`}>
+                {label}
+              </button>
+            ))}
+            {linkMode !== 'off' && (
+              <input value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder="campaign (optional)"
+                className="rounded-lg border border-line bg-elevated px-2 py-1 font-mono text-[11px] text-fg placeholder:text-muted outline-none transition focus:border-coral" />
+            )}
+          </div>
+        </Collapsible>
       </div>
 
+      {/* --- warnings --- */}
+      {effTab !== 'all' && (
+        <p className="mt-3 font-mono text-[11px] text-muted">Editing {PLATFORMS[effTab]?.label} only. Thread &amp; media are shared.</p>
+      )}
+      {videoToBluesky && (
+        <p className="mt-2 font-mono text-[11px] text-muted">Bluesky video needs a verified-email account and has daily limits.</p>
+      )}
+      {threadToFlat && (
+        <p className="mt-2 font-mono text-[11px] text-muted">Threads/LinkedIn post only the first part; Bluesky &amp; Mastodon post the full chain.</p>
+      )}
+
+      
       <div className="mt-4 flex items-center gap-3">
         <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
           className="rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-xs text-fg outline-none transition focus:border-coral [color-scheme:dark]" />
