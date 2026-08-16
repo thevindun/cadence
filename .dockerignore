@@ -3,6 +3,11 @@ dist
 server/.venv
 server/__pycache__
 server/cadence.db
+server/cadence.db-wal
+server/cadence.db-shm
 server/media
 **/.env
+.env.desktop
+src-tauri/target
+src-tauri/binaries
 .git
