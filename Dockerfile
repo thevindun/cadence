@@ -15,5 +15,5 @@ COPY server ./server
 COPY --from=web /app/dist ./dist
 ENV FRONTEND_DIST=/app/dist DATA_DIR=/data PYTHONUNBUFFERED=1
 WORKDIR /app/server
-EXPOSE 8000
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+EXPOSE 8080
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
