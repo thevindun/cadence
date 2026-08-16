@@ -252,7 +252,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         </button>
         {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
       </div>
-
+ 
       {media.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">
           {media.map((m) => (
