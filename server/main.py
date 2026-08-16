@@ -484,7 +484,8 @@ async def connect_account(platform: str, creds: dict, request: Request) -> dict:
     try:
         resolved = await make_real_adapter(platform, data).verify()
     except Exception as e:
-        raise HTTPException(400, f"Could not connect: {e}")
+        detail = str(e) or getattr(getattr(e, "response", None), "text", "") or repr(e)
+        raise HTTPException(400, f"Could not connect: {detail}")
     handle = resolved or data.get("handle") or platform
     data["handle"] = handle
     cid = set_connection(platform, handle, data)
