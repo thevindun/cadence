@@ -472,6 +472,10 @@ def create_session(token: str, user_id: str, expires_at: int):
         c.execute("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
                   (token, user_id, expires_at))
 
+def prune_sessions() -> int:
+    with _conn() as c:
+        cur = c.execute("DELETE FROM sessions WHERE expires_at < ?", (int(time.time() * 1000),))
+        return cur.rowcount
 
 def get_session(token: str) -> dict | None:
     with _conn() as c:
@@ -530,6 +534,9 @@ def unread_count(is_admin: bool) -> int:
         ).fetchone()["n"]
 
 
-def mark_all_read():
+def mark_all_read(is_admin: bool = True):
     with _conn() as c:
-        c.execute("UPDATE notifications SET read = 1 WHERE read = 0")
+        c.execute(
+            "UPDATE notifications SET read = 1 WHERE read = 0 AND (audience = 'all' OR (audience = 'admin' AND ?))",
+            (1 if is_admin else 0,),
+        )

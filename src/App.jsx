@@ -83,12 +83,11 @@ export default function App() {
   const currentUser = auth.user                         // null when auth disabled
   const isAdmin = !currentUser || currentUser.role === 'admin'
   const nav = NAV.filter((n) => n.id !== 'accounts' || isAdmin)
-  // if (currentUser?.role === 'admin') nav.push({ id: 'team', label: 'Team', icon: Users })
   const failedCount = posts.filter((p) => p.status === STATUS.FAILED).length
   nav.push({ id: 'failures', label: 'Failures', icon: AlertTriangle, badge: failedCount || null, danger: true })
-  if (currentUser?.role === 'admin') {
+  if (isAdmin) {
     nav.push({ id: 'review', label: 'Review', icon: ClipboardCheck, badge: pendingCount || null })
-    nav.push({ id: 'team', label: 'Team', icon: Users })
+    if (currentUser) nav.push({ id: 'team', label: 'Team', icon: Users })   // no team without auth
   }
 
   if (auth.state === 'loading')
@@ -99,12 +98,12 @@ export default function App() {
           <p className="font-mono text-xs text-muted">Starting Cadence…</p>
         </div>
       </div>
-    ) 
+    )
   if (auth.state === 'login')
     return <Login needsSetup={auth.needsSetup} onAuthed={(user) => setAuth({ state: 'ready', user })} />
   return (
-    <div className="flex min-h-screen bg-ink font-display text-fg">
-      <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-surface">
+    <div className="flex h-screen overflow-hidden bg-ink font-display text-fg">
+      <aside className="flex w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface">
         <div className="px-5 py-5"><Logo /></div>
         <nav className="flex flex-col gap-1 px-3">
           {nav.map(({ id, label, icon: Icon, soon, badge, danger }) => (
@@ -148,7 +147,7 @@ export default function App() {
           <Notifications />
         </header>
 
-        <main className="flex-1 p-8">
+        <main className="flex-1 overflow-y-auto p-8">
           {view === 'import' && <Import accounts={importAccounts} categories={categories} onImported={() => setView('queue')} />}
           {view === 'queue' && (
             <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">

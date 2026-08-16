@@ -24,7 +24,7 @@ from db import (
     MEDIA_DIR, add_media, get_media, list_categories, add_category, delete_category, list_media, delete_media, add_snapshot, snapshots_since,
     add_follower_snapshot, follower_snapshots_since, create_link, get_link, add_click, click_counts, create_user, get_user_by_email, get_user, count_users,
     create_session, get_session, delete_session,list_users, delete_user, update_user_role, count_admins,
-    add_notification, list_notifications, unread_count, mark_all_read
+    add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media
 )
 from notify import send_email
 from pathlib import Path
@@ -117,6 +117,22 @@ def _next_occurrence(iso: str, repeat: str, now: datetime) -> datetime | None:
         nxt = step(nxt)
     return nxt
 
+def _queue_next_occurrence(post: dict):
+    """A repeating post spawns its successor; the published one stays as history."""
+    repeat = post.get("repeat", "none")
+    if repeat == "none":
+        return
+    nxt = _next_occurrence(post["scheduledAt"], repeat, datetime.now(timezone.utc))
+    if nxt is None:
+        return
+    data = {k: v for k, v in post.items() if k not in ("results", "metrics")}
+    data["id"] = f"post_{uuid.uuid4().hex[:12]}"
+    data["scheduledAt"] = nxt.isoformat().replace("+00:00", "Z")
+    data["status"] = "scheduled"
+    data["createdAt"] = int(time.time() * 1000)
+    upsert_post(Post(**data))
+    print(f"[repeat] queued next {repeat} occurrence at {data['scheduledAt']}")
+
 async def _publish(post: dict):
     from oauth import refresh_if_needed
     prior = post.get("results") or {}
@@ -135,10 +151,17 @@ async def _publish(post: dict):
         variant = (post.get("variants") or {}).get(conn["platform"])
         staged = {**post, "text": variant} if variant else post
         effective = _apply_links(staged, conn["platform"])
+        missing = [m for m in (post.get("media") or []) if read_media(m) is None]
+        if missing:
+            results[target] = {"ok": False, "error": f"media file missing on disk: {', '.join(missing)}"}
+            continue
         try:
             results[target] = await get_adapter(target).publish(effective)
         except Exception as e:
-            results[target] = {"ok": False, "error": str(e)}
+            detail = str(e) or getattr(e, "content", None) or getattr(e, "response", None)
+            msg = f"{type(e).__name__}: {detail}" if detail else type(e).__name__
+            results[target] = {"ok": False, "error": str(msg)[:300]}
+            import traceback; traceback.print_exc()
     all_ok = all(results.get(t, {}).get("ok") for t in post["platforms"])
     patch_post(post["id"], {"status": "published" if all_ok else "failed", "results": results})
 
@@ -149,6 +172,7 @@ async def _publish(post: dict):
         errs = "; ".join(f"{t}: {r.get('error')}" for t, r in results.items() if t != "_review" and not r.get("ok"))
         add_notification("failed", "Post failed", f"{snippet} — {errs}", post["id"])
         send_email("A scheduled post failed", f"{post['text']}\n\n{errs}")
+        _queue_next_occurrence(post)
 
 async def _publish_due():
     now = datetime.now(timezone.utc)
@@ -213,10 +237,14 @@ def _seed_from_env():
             set_connection("bluesky", creds[0], {"handle": creds[0], "app_password": creds[1]})
             print(f"[seed] imported Bluesky creds from .env for {creds[0]}")
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
     _seed_from_env()
+    n = prune_sessions()
+    if n:
+        print(f"[auth] pruned {n} expired sessions")    
     from crypto import is_enabled
     if is_enabled():
         from db import list_connections, set_connection
@@ -247,6 +275,8 @@ def _now_ms() -> int:
 
 
 def _needs_auth(method: str, path: str) -> bool:
+    if method == "OPTIONS":
+        return False                              # CORS preflight carries no auth header
     if not auth_enabled():
         return False
     if not path.startswith(_API_PREFIXES):        # SPA, /health, /l/… → open
@@ -336,6 +366,8 @@ def update_post(post_id: str, patch: PostPatch, request: Request) -> dict:
 
 @app.delete("/posts/{post_id}")
 def remove_post(post_id: str) -> dict:
+    if get_post(post_id) is None:
+        raise HTTPException(404, "Post not found")
     delete_post(post_id)
     return {"ok": True, "id": post_id}
 
@@ -370,6 +402,13 @@ def serve_media(media_id: str):
 def posts_pending(request: Request) -> list[dict]:
     _require_admin(request)
     return [p for p in list_posts() if p["status"] == "pending"]
+
+@app.get("/posts/{post_id}")
+def get_one_post(post_id: str) -> dict:
+    post = get_post(post_id)
+    if post is None:
+        raise HTTPException(404, "Post not found")
+    return post
 
 @app.post("/posts/{post_id}/approve")
 def post_approve(post_id: str, request: Request) -> dict:
@@ -684,8 +723,8 @@ def notifications_list(request: Request) -> dict:
 
 
 @app.post("/notifications/read")
-def notifications_read() -> dict:
-    mark_all_read()
+def notifications_read(request: Request) -> dict:
+    mark_all_read(_is_admin_req(request))
     return {"ok": True}
 
 @app.get("/inbox")

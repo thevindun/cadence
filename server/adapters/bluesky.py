@@ -13,6 +13,7 @@ class BlueskyAdapter(Adapter):
         self._handle = handle
         self._app_password = app_password
         self._client = None                      # cached logged-in session
+        self._pds_cache = None
 
     async def _get_client(self) -> AsyncClient:
         if self._client is None:
@@ -72,15 +73,28 @@ class BlueskyAdapter(Adapter):
 
         except Exception as e:
             self._client = None
-            return {"ok": False, "error": str(e)}
+            detail = str(e) or getattr(e, "content", None) or getattr(e, "response", None)
+            msg = f"{type(e).__name__}: {detail}" if detail else type(e).__name__
+            return {"ok": False, "error": str(msg)[:300]}
+
+    async def _pds_host(self, client) -> str:
+            """The account's real PDS host from its DID doc — NOT the login base URL.
+            Service-auth tokens for the video service must be scoped to this host."""
+            if self._pds_cache:
+                return self._pds_cache
+            did = client.me.did
+            async with httpx.AsyncClient(timeout=30) as http:
+                doc = (await http.get(f"https://plc.directory/{did}")).json()
+            for s in doc.get("service", []):
+                if s.get("id", "").endswith("#atproto_pds"):
+                    host = httpx.URL(s["serviceEndpoint"]).host
+                    self._pds_cache = host
+                    return host
+            raise Exception(f"Could not resolve PDS host for {did}")
 
     async def _video_embed(self, client, media):
         did = client.me.did
-
-        # The service-auth token's audience must be the account's PDS.
-        # ⚠️ MOST LIKELY LINE TO NEED A TWEAK: if the video host returns an auth
-        # error, adjust how pds_host is derived (or hardcode your PDS host).
-        pds_host = httpx.URL(str(client._base_url)).host
+        pds_host = await self._pds_host(client)
 
         auth = await client.com.atproto.server.get_service_auth(
             models.ComAtprotoServerGetServiceAuth.Params(
@@ -101,22 +115,32 @@ class BlueskyAdapter(Adapter):
                 },
                 content=media["bytes"],
             )
-            up.raise_for_status()
-            job_id = up.json().get("jobId")
+            # 409 = this exact video was already uploaded; the body still carries
+            # the completed job, so reuse it instead of treating it as an error.
+            if up.status_code != 409:
+                up.raise_for_status()
+            body = up.json()
 
-        # Poll processing (this call CAN go through the PDS) until the blob is ready.
-        blob = None
-        for _ in range(60):                              # ~2 min ceiling
-            await asyncio.sleep(2)
-            status = await client.app.bsky.video.get_job_status(
-                models.AppBskyVideoGetJobStatus.Params(job_id=job_id)
-            )
-            js = status.job_status
-            if js.state == "JOB_STATE_FAILED":
-                raise Exception(js.error or "video processing failed")
-            if js.blob:
-                blob = js.blob
-                break
+        js = body.get("jobStatus") or body
+        blob = js.get("blob")
+        job_id = js.get("jobId")
+
+# getJobStatus must ALSO go to the video service — the PDS returns 501.
+        async with httpx.AsyncClient(timeout=60) as http:
+            for _ in range(60):                          # ~2 min ceiling
+                if blob:
+                    break
+                await asyncio.sleep(2)
+                r = await http.get(
+                    "https://video.bsky.app/xrpc/app.bsky.video.getJobStatus",
+                    params={"jobId": job_id},
+                    headers={"Authorization": f"Bearer {auth.token}"},
+                )
+                r.raise_for_status()
+                js2 = r.json().get("jobStatus") or {}
+                if js2.get("state") == "JOB_STATE_FAILED":
+                    raise Exception(js2.get("error") or "video processing failed")
+                blob = js2.get("blob")
         if blob is None:
             raise Exception("video processing timed out")
 

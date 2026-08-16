@@ -6,7 +6,7 @@ ITERATIONS = 200_000
 
 
 def auth_enabled() -> bool:
-    return os.environ.get("CADENCE_AUTH", "").lower() in ("1", "on", "true", "yes")
+    return os.environ.get("CADENCE_AUTH", "on").lower() in ("1", "on", "true", "yes")
 
 
 def hash_password(password: str, salt: str | None = None):

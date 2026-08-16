@@ -45,7 +45,7 @@ export default function Queue({ posts, onEdit, onDelete }) {
               <span className="flex shrink-0 gap-1">
                 {post.platforms.map((id) => (
                   <span key={id} className="rounded bg-ink px-1.5 py-0.5 font-mono text-[10px] text-muted">
-                    {PLATFORMS[id]?.short ?? idshort(id)}
+                    {short(id)}
                   </span>
                 ))}
               </span>

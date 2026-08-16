@@ -6,6 +6,7 @@ import { API } from '../core/api.js'
 import { useCategories } from '../core/useCategories.js'
 import { MediaPicker } from './MediaLibrary.jsx'
 import { Library } from 'lucide-react'
+import { compressImage } from '../core/imageCompress.js'
 
 function nowLocalInput() {
   const d = new Date(); d.setSeconds(0, 0)
@@ -120,7 +121,8 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
     setUploading(true)
     try {
       for (const file of files) {
-        const fd = new FormData(); fd.append('file', file)
+        const prepared = await compressImage(file)
+        const fd = new FormData(); fd.append('file', prepared)
         const res = await fetch(`${API}/media`, { method: 'POST', body: fd })
         if (!res.ok) throw new Error('upload failed')
         const m = await res.json()
