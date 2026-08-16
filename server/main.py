@@ -626,6 +626,13 @@ def link_stats() -> list[dict]:
 def health() -> dict:
     return {"status": "ok"}
 
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page():
+    return (Path(__file__).parent / "static" / "privacy.html").read_text()
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms_page():
+    return (Path(__file__).parent / "static" / "terms.html").read_text()
 
 @app.get("/auth/status")
 def auth_status() -> dict:
