@@ -20,3 +20,33 @@
   ::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
   ::-webkit-scrollbar-track { background: transparent; }
 }
+
+@theme {
+  --color-ink:      var(--c-ink);
+  --color-surface:  var(--c-surface);
+  --color-elevated: var(--c-elevated);
+  --color-line:     var(--c-line);
+  --color-fg:       var(--c-fg);
+  --color-muted:    var(--c-muted);
+  --color-coral:    #FF5C38;
+}
+
+:root {
+  --c-ink:      #0A1220;
+  --c-surface:  #0F1A2B;
+  --c-elevated: #16233A;
+  --c-line:     #22334A;
+  --c-fg:       #F5F7FA;
+  --c-muted:    #9BA7B6;
+  color-scheme: dark;
+}
+
+:root.light {
+  --c-ink:      #FBFCFD;
+  --c-surface:  #FFFFFF;
+  --c-elevated: #F2F5F8;
+  --c-line:     #DFE5EC;
+  --c-fg:       #0F1A2B;
+  --c-muted:    #64748B;
+  color-scheme: light;
+}

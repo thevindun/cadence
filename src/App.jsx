@@ -26,6 +26,9 @@ import { Inbox as InboxIcon, Menu, X as CloseIcon } from 'lucide-react'
 import { API, waitForServer } from './core/api.js'
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Onboarding from './components/Onboarding.jsx'
+import { Sun, Moon } from 'lucide-react'
+import { useTheme } from './core/useTheme.js'
+import { useHotkeys } from './core/useHotkeys.js'
 
 const NAV = [
   { id: 'queue', path: '/queue', label: 'Queue', icon: ListChecks },
@@ -44,11 +47,23 @@ export default function App() {
   const editing = posts.find((p) => p.id === editingId) || null
   const location = useLocation()
   const navigate = useNavigate()
+  const [theme, toggleTheme] = useTheme()
   const activeLabel = [...NAV,
   { path: '/failures', label: 'Failures' },
   { path: '/review', label: 'Review' },
   { path: '/team', label: 'Team' },
   ].find((n) => location.pathname.startsWith(n.path))?.label ?? ''
+  
+  const [helpOpen, setHelpOpen] = useState(false)
+  useHotkeys({
+    'g': () => navigate('/queue'),
+    'c': () => navigate('/calendar'),
+    'i': () => navigate('/insights'),
+    'l': () => navigate('/library'),
+    'a': () => navigate('/accounts'),
+    '?': () => setHelpOpen((v) => !v),
+    'escape': () => { setHelpOpen(false); setNavOpen(false) },
+  })
 
   const [auth, setAuth] = useState({ state: 'loading', needsSetup: false, user: null })
 
@@ -148,7 +163,14 @@ export default function App() {
               Connect account
             </NavLink>
           )}
+          <button onClick={toggleTheme}
+            className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm text-muted transition hover:text-fg">
+            {theme === 'dark' ? <Sun size={14} strokeWidth={1.75} /> : <Moon size={14} strokeWidth={1.75} />}
+            {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
+
           {getToken() && (
+            
             <button onClick={async () => { await logout(); setAuth({ state: 'login', needsSetup: false }) }}
               className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm text-muted transition hover:text-red-400">
               <LogOut size={14} strokeWidth={1.75} /> Sign out
