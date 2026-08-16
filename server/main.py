@@ -395,7 +395,12 @@ def serve_media(media_id: str):
     path = MEDIA_DIR / media_id
     if meta is None or not path.exists():
         raise HTTPException(404, "Media not found")
-    return FileResponse(path, media_type=meta["content_type"], filename=meta["filename"])
+    return FileResponse(
+        path,
+        media_type=meta["content_type"],
+        headers={"Content-Disposition": f'inline; filename="{meta["filename"]}"'}
+    )
+
 
 
 @app.get("/posts/pending")
