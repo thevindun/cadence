@@ -10,6 +10,9 @@ import { compressImage } from '../core/imageCompress.js'
 import Collapsible from './Collapsible.jsx'
 import { Tag, Link2, Repeat } from 'lucide-react'
 import { useToast } from '../core/useToast.jsx'
+import { useHotkeys } from '../core/useHotkeys.js'
+import EmojiPicker from './EmojiPicker.jsx'
+import { Smile } from 'lucide-react'
 
 function nowLocalInput() {
   const d = new Date(); d.setSeconds(0, 0)
@@ -45,6 +48,17 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const [linkMode, setLinkMode] = useState('off')
   const [utmCampaign, setUtmCampaign] = useState('')
   const toast = useToast()
+
+  const [emojiOpen, setEmojiOpen] = useState(false)
+  const taRef = useRef(null)
+
+  const insertEmoji = (emoji) => {
+    const ta = taRef.current
+    if (!ta) { setActiveText(activeText + emoji); return }
+    const { selectionStart: s, selectionEnd: e } = ta
+    setActiveText(activeText.slice(0, s) + emoji + activeText.slice(e))
+    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + emoji.length, s + emoji.length) })
+  }
 
   useEffect(() => {
     (async () => {
@@ -172,6 +186,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
       reset()
     }
   }
+  useHotkeys({ 'mod+enter': () => schedule() })
 
   const videoToBluesky = hasVideo && chosen.some((a) => a.platform === 'bluesky')
   const threadToFlat = thread.length > 0 && chosen.some((a) => a.platform === 'linkedin' || a.platform === 'threads')
@@ -226,10 +241,17 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         </div>
       )}
 
-      <textarea value={activeText} onChange={(e) => setActiveText(e.target.value)}
-        placeholder={effTab === 'all' ? 'Type your caption…' : `Override for ${PLATFORMS[effTab]?.label ?? effTab} — blank uses the base caption`}
-        rows={5}
-        className="w-full resize-none rounded-lg border border-line bg-elevated px-3 py-2 text-sm text-fg placeholder:text-muted outline-none transition focus:border-coral" />
+      <div className="relative">
+        <textarea ref={taRef} value={activeText} onChange={(e) => setActiveText(e.target.value)}
+          placeholder={effTab === 'all' ? 'Type your caption…' : `Override for ${PLATFORMS[effTab]?.label ?? effTab} — blank uses the base caption`}
+          rows={5}
+          className="w-full resize-none rounded-lg border border-line bg-elevated px-3 py-2 pb-8 text-sm text-fg placeholder:text-muted outline-none transition focus:border-coral" />
+        <button onClick={() => setEmojiOpen((v) => !v)}
+          className={`absolute bottom-2 right-2 grid h-6 w-6 place-items-center rounded transition ${emojiOpen ? 'text-coral' : 'text-muted hover:text-fg'}`}>
+          <Smile size={15} strokeWidth={1.75} />
+        </button>
+        {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+      </div>
 
       {media.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">

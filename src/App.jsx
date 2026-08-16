@@ -217,6 +217,25 @@ export default function App() {
           </Routes>
         </main>
       </div>
+          {helpOpen && (
+        <div onClick={() => setHelpOpen(false)}
+          className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
+          <div onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-xl border border-line bg-surface p-5">
+            <p className="mb-3 font-mono text-xs tracking-wider text-muted">KEYBOARD SHORTCUTS</p>
+            <ul className="flex flex-col gap-2 text-sm">
+              {[['G', 'Queue'], ['C', 'Calendar'], ['I', 'Insights'], ['L', 'Library'],
+                ['A', 'Accounts'], ['⌘/Ctrl + Enter', 'Schedule post'], ['?', 'This help']].map(([k, v]) => (
+                <li key={k} className="flex items-center justify-between">
+                  <span className="text-muted">{v}</span>
+                  <kbd className="rounded border border-line bg-elevated px-1.5 py-0.5 font-mono text-[11px] text-fg">{k}</kbd>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
     </div>
+
   )
 }
