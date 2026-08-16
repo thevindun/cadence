@@ -12,3 +12,11 @@
   --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
   --font-mono:    'JetBrains Mono', ui-monospace, monospace;
 }
+
+@layer base {
+  button, a { transition: color .12s, background-color .12s, border-color .12s, transform .12s; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--color-line); border-radius: 6px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--color-muted); }
+  ::-webkit-scrollbar-track { background: transparent; }
+}

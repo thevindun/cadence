@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Check, X, Loader2, ExternalLink, Plus } from 'lucide-react'
 import { API } from '../core/api.js'
 import { PLATFORMS } from '../core/types.js'
+import { useToast } from '../core/useToast.jsx'
 
 const CONNECT_FIELDS = {
   bluesky: [
@@ -17,6 +18,7 @@ const CONNECT_FIELDS = {
 export default function Accounts() {
   const [platforms, setPlatforms] = useState([])
   const [loading, setLoading] = useState(true)
+  const toast = useToast()
 
   const load = useCallback(async () => {
     try {
@@ -28,7 +30,9 @@ export default function Accounts() {
 
   useEffect(() => { load() }, [load])
   useEffect(() => {
-    const onMsg = (e) => { if (e.data === 'cadence-oauth-done') load() }
+    const onMsg = (e) => { if (e.data === 'cadence-oauth-done') 
+      toast('Account connected')
+      load() }
     window.addEventListener('message', onMsg)
     return () => window.removeEventListener('message', onMsg)
   }, [load])
@@ -57,6 +61,7 @@ function PlatformRow({ platform, onChange }) {
   const [values, setValues] = useState({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const toast = useToast() 
 
   const conns = platform.connections || []
   const setField = (n, v) => setValues((s) => ({ ...s, [n]: v }))
@@ -70,6 +75,7 @@ function PlatformRow({ platform, onChange }) {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Could not connect')
+      toast('Account connected')
       setValues({}); setAdding(false); onChange()
     } catch (err) { setError(err.message) } finally { setBusy(false) }
   }

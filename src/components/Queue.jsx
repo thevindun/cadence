@@ -1,7 +1,8 @@
 import StatusPill from './StatusPill.jsx'
 import { STATUS, PLATFORMS } from '../core/types.js'
-import { Pencil, Trash2, Repeat, Image as ImageIcon, MessageSquare } from 'lucide-react'
+import { Pencil, Trash2, Repeat, Image as ImageIcon, MessageSquare, ListChecks } from 'lucide-react'
 import { useCategories } from '../core/useCategories.js'
+import EmptyState from './EmptyState.jsx'
 
 const EDITABLE = new Set([STATUS.DRAFT, STATUS.SCHEDULED, STATUS.FAILED])
 
@@ -17,10 +18,10 @@ const short = (t) => {
   return PLATFORMS[platform]?.short ?? platform
 }
 
-export default function Queue({ posts, onEdit, onDelete }) {
+export default function Queue({ posts, onEdit, onDelete, loading }) {
   const { categories } = useCategories()
   const catOf = (id) => categories.find((c) => c.id === id)
-  
+
   const sorted = [...posts].sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
 
   return (
@@ -29,18 +30,29 @@ export default function Queue({ posts, onEdit, onDelete }) {
         QUEUE · {posts.length} {posts.length === 1 ? 'POST' : 'POSTS'}
       </p>
 
-      {sorted.length === 0 ? (
-        <p className="py-8 text-center text-sm text-muted">Nothing queued yet. Compose your first post.</p>
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="h-11 animate-pulse rounded-lg border border-line bg-elevated w-full" />
+          ))}
+        </div>
+      ) : sorted.length === 0 ? (
+        <EmptyState 
+          icon={ListChecks} 
+          title="Nothing queued yet"
+          body="Write a post on the left, pick an account, choose a time, and it'll publish." 
+        />
       ) : (
+
         <ul className="flex flex-col gap-2">
           {sorted.map((post) => (
             <li key={post.id}
-              className="group flex items-center gap-3 rounded-lg border border-line bg-elevated px-3 py-2.5">
+              className="group flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-line bg-elevated px-3 py-2.5">
               {post.category && catOf(post.category) && (
                 <span title={catOf(post.category).name} className="h-2.5 w-2.5 shrink-0 rounded-full"
                   style={{ background: catOf(post.category).color }} />
               )}
-              <span className="w-24 shrink-0 font-mono text-xs text-muted">{fmtTime(post.scheduledAt)}</span>
+              <span className="w-24 shrink-0 order-1 font-mono text-xs text-muted">{fmtTime(post.scheduledAt)}</span>
               <span className="flex-1 truncate text-sm text-fg">{post.text}</span>
               <span className="flex shrink-0 gap-1">
                 {post.platforms.map((id) => (
@@ -50,12 +62,12 @@ export default function Queue({ posts, onEdit, onDelete }) {
                 ))}
               </span>
               {post.media?.length > 0 && (
-                <span title={`${post.media.length} image(s)`} className="flex shrink-0 items-center gap-0.5 font-mono text-[10px] text-muted">
+                <span title={`${post.media.length} image(s)`} className="flex shrink-0 items-center gap-0.5 font-mono text-[10px] hidden sm:flex text-muted">
                   <ImageIcon size={12} strokeWidth={1.75} /> {post.media.length}
                 </span>
               )}
               {post.thread?.length > 0 && (
-                <span title={`Thread of ${post.thread.length + 1}`} className="flex shrink-0 items-center gap-0.5 font-mono text-[10px] text-muted">
+                <span title={`Thread of ${post.thread.length + 1}`} className="flex shrink-0 items-center gap-0.5 font-mono hidden sm:flex text-[10px] text-muted">
                   <MessageSquare size={12} strokeWidth={1.75} /> {post.thread.length + 1}
                 </span>
               )}
@@ -66,7 +78,7 @@ export default function Queue({ posts, onEdit, onDelete }) {
                 </span>
               )}
               <StatusPill status={post.status} />
-              <span className="flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+              <span className="ml-auto flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                 {EDITABLE.has(post.status) && (
                   <button onClick={() => onEdit(post.id)} title="Edit"
                     className="grid h-7 w-7 place-items-center rounded-md text-muted transition hover:bg-ink hover:text-fg">

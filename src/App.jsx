@@ -22,18 +22,19 @@ import Failures from './components/Failures.jsx'
 import { AlertTriangle } from 'lucide-react'
 import Notifications from './components/Notifications.jsx'
 import Inbox from './components/Inbox.jsx'
-import { Inbox as InboxIcon } from 'lucide-react'
+import { Inbox as InboxIcon, Menu, X as CloseIcon } from 'lucide-react'
 import { API, waitForServer } from './core/api.js'
-import { Routes, Route, NavLink, Navigate, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import Onboarding from './components/Onboarding.jsx'
 
 const NAV = [
-  { id: 'queue',    path: '/queue',    label: 'Queue',    icon: ListChecks },
+  { id: 'queue', path: '/queue', label: 'Queue', icon: ListChecks },
   { id: 'calendar', path: '/calendar', label: 'Calendar', icon: CalendarDays },
-  { id: 'import',   path: '/import',   label: 'Import',   icon: Upload },
-  { id: 'library',  path: '/library',  label: 'Library',  icon: Images },
+  { id: 'import', path: '/import', label: 'Import', icon: Upload },
+  { id: 'library', path: '/library', label: 'Library', icon: Images },
   { id: 'insights', path: '/insights', label: 'Insights', icon: BarChart3 },
   { id: 'accounts', path: '/accounts', label: 'Accounts', icon: Plug },
-  { id: 'inbox',    path: '/inbox',    label: 'Inbox',    icon: InboxIcon },
+  { id: 'inbox', path: '/inbox', label: 'Inbox', icon: InboxIcon },
 ]
 
 export default function App() {
@@ -43,14 +44,16 @@ export default function App() {
   const editing = posts.find((p) => p.id === editingId) || null
   const location = useLocation()
   const navigate = useNavigate()
-  const activeLabel = [...NAV, 
-    { path: '/failures', label: 'Failures' },
-    { path: '/review',   label: 'Review' },
-    { path: '/team',     label: 'Team' },
+  const activeLabel = [...NAV,
+  { path: '/failures', label: 'Failures' },
+  { path: '/review', label: 'Review' },
+  { path: '/team', label: 'Team' },
   ].find((n) => location.pathname.startsWith(n.path))?.label ?? ''
 
   const [auth, setAuth] = useState({ state: 'loading', needsSetup: false, user: null })
 
+  const [navOpen, setNavOpen] = useState(false)
+  useEffect(() => { setNavOpen(false) }, [location.pathname])   // close on navigate
   useEffect(() => {
     installAuthFetch()
       ; (async () => {
@@ -108,8 +111,18 @@ export default function App() {
     return <Login needsSetup={auth.needsSetup} onAuthed={(user) => setAuth({ state: 'ready', user })} />
   return (
     <div className="flex h-screen overflow-hidden bg-ink font-display text-fg">
-      <aside className="flex w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface">
+      {navOpen && (
+        <div onClick={() => setNavOpen(false)}
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm md:hidden" />
+      )}
+      <aside className={`fixed inset-y-0 left-0 z-40 flex w-60 shrink-0 flex-col overflow-y-auto border-r border-line bg-surface
+        transition-transform duration-200 md:static md:translate-x-0
+        ${navOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="px-5 py-5"><Logo /></div>
+        <button onClick={() => setNavOpen(false)}
+          className="absolute right-3 top-5 grid h-8 w-8 place-items-center rounded-lg text-muted md:hidden">
+          <CloseIcon size={18} strokeWidth={1.75} />
+        </button>
         <nav className="flex flex-col gap-1 px-3">
           {nav.map(({ id, path, label, icon: Icon, badge, danger }) => (
             <NavLink key={id} to={path}
@@ -145,15 +158,21 @@ export default function App() {
       </aside>
 
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-line px-8 py-4">
-          <div>
-            <h1 className="text-lg font-medium tracking-tight">{activeLabel}</h1>
+        <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-4 md:px-8">
+          <button onClick={() => setNavOpen(true)}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-muted md:hidden">
+            <Menu size={18} strokeWidth={1.75} />
+          </button>
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate text-lg font-medium tracking-tight">{activeLabel}</h1>
             <p className="mt-0.5 font-mono text-xs text-muted">THIS WEEK · {scheduledCount} SCHEDULED</p>
           </div>
           <Notifications />
         </header>
 
-        <main className="flex-1 overflow-y-auto p-8">
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <Onboarding />
+
           <Routes>
             <Route path="/" element={<Navigate to="/queue" replace />} />
             <Route path="/queue" element={
@@ -164,14 +183,14 @@ export default function App() {
               </div>
             } />
             <Route path="/calendar" element={<Calendar posts={posts} onReschedule={updatePost} />} />
-            <Route path="/import"   element={<Import accounts={importAccounts} categories={categories} onImported={() => {}} />} />
-            <Route path="/library"  element={<MediaLibrary />} />
+            <Route path="/import" element={<Import accounts={importAccounts} categories={categories} onImported={() => { }} />} />
+            <Route path="/library" element={<MediaLibrary />} />
             <Route path="/insights" element={<Insights posts={posts} onRefresh={refreshMetrics} />} />
             <Route path="/accounts" element={<Accounts />} />
-            <Route path="/inbox"    element={<Inbox />} />
+            <Route path="/inbox" element={<Inbox />} />
             <Route path="/failures" element={<Failures posts={posts} onDelete={deletePost} />} />
-            <Route path="/review"   element={<Review onChange={() => {}} />} />
-            <Route path="/team"     element={<Team currentUserId={currentUser?.id} />} />
+            <Route path="/review" element={<Review onChange={() => { }} />} />
+            <Route path="/team" element={<Team currentUserId={currentUser?.id} />} />
             <Route path="*" element={<Navigate to="/queue" replace />} />
           </Routes>
         </main>

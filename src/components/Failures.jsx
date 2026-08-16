@@ -2,16 +2,20 @@ import { useState } from 'react'
 import { RotateCw, Trash2, Loader2, AlertTriangle } from 'lucide-react'
 import { API } from '../core/api.js'
 import { STATUS, PLATFORMS } from '../core/types.js'
+import { useToast } from '../core/useToast.jsx'
+import EmptyState from './EmptyState.jsx'
 
 const short = (t) => PLATFORMS[t.includes(':') ? t.split(':')[0] : t]?.short ?? t
 
 export default function Failures({ posts, onDelete }) {
   const [busy, setBusy] = useState(null)
+  const toast = useToast() 
   const failed = posts
     .filter((p) => p.status === STATUS.FAILED)
     .sort((a, b) => new Date(b.scheduledAt) - new Date(a.scheduledAt))
 
   const retry = async (id) => {
+    toast('Retrying…') 
     setBusy(id)
     try { await fetch(`${API}/posts/${id}/retry`, { method: 'POST' }) }
     finally { setBusy(null) }
@@ -24,7 +28,8 @@ export default function Failures({ posts, onDelete }) {
     <div className="mx-auto max-w-2xl">
       <p className="mb-4 font-mono text-xs tracking-wider text-muted">FAILED POSTS · {failed.length}</p>
       {failed.length === 0 ? (
-        <p className="py-10 text-center text-sm text-muted">Nothing failed. Anything that doesn't send lands here with the reason and a retry.</p>
+        <EmptyState icon={AlertTriangle} title="Nothing failed"
+          body="Posts that don't send land here with the exact error and a one-click retry." />
       ) : (
         <div className="flex flex-col gap-2">
           {failed.map((p) => (

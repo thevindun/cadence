@@ -1,4 +1,4 @@
-import { RefreshCw, Download, Heart, Repeat2, MessageCircle } from 'lucide-react'
+import { RefreshCw, Download, Heart, Repeat2, MessageCircle, BarChart3 } from 'lucide-react'
 import { STATUS, PLATFORMS } from '../core/types.js'
 import { useState, useMemo, useEffect } from 'react'
 import { API } from '../core/api.js'
@@ -172,9 +172,10 @@ export default function Insights({ posts, onRefresh }) {
           <section className="rounded-xl border border-line bg-surface p-5">
             <p className="mb-4 font-mono text-xs tracking-wider text-muted">ENGAGEMENT BY POST DATE</p>
             {published.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted">No published posts in this range yet.</p>
+              <EmptyState icon={BarChart3} title="No data yet"
+                body="Once posts publish, engagement appears here and refreshes every 5 minutes." />
             ) : (
-              <div className="flex h-40 items-end gap-1">
+              <div className="flex h-40 items-end gap-1 overflow-x-auto">
                 {buckets.map((b, i) => (
                   <div key={i} className="group flex flex-1 flex-col items-center justify-end gap-1" title={`${b.label}: ${b.engagement}`}>
                     <div className="w-full rounded-t bg-coral/70 transition group-hover:bg-coral"

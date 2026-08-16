@@ -9,6 +9,7 @@ import { Library } from 'lucide-react'
 import { compressImage } from '../core/imageCompress.js'
 import Collapsible from './Collapsible.jsx'
 import { Tag, Link2, Repeat } from 'lucide-react'
+import { useToast } from '../core/useToast.jsx'
 
 function nowLocalInput() {
   const d = new Date(); d.setSeconds(0, 0)
@@ -43,6 +44,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const [pickerOpen, setPickerOpen] = useState(false)
   const [linkMode, setLinkMode] = useState('off')
   const [utmCampaign, setUtmCampaign] = useState('')
+  const toast = useToast()
 
   useEffect(() => {
     (async () => {
@@ -51,8 +53,10 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         const flat = []
         for (const p of data)
           for (const c of (p.connections || []))
-            flat.push({ id: c.id, handle: c.handle, platform: p.id,
-              short: PLATFORMS[p.id]?.short ?? p.id, maxLen: PLATFORMS[p.id]?.maxLen ?? 500 })
+            flat.push({
+              id: c.id, handle: c.handle, platform: p.id,
+              short: PLATFORMS[p.id]?.short ?? p.id, maxLen: PLATFORMS[p.id]?.maxLen ?? 500
+            })
         setAccounts(flat)
       } catch (err) { console.error('Failed to load accounts:', err) }
     })()
@@ -67,15 +71,15 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
       setSelected(Object.fromEntries(editing.platforms.map((id) => [id, true])))
       setWhen(isoToLocalInput(editing.scheduledAt)); setRepeat(editing.repeat || REPEAT.NONE)
       setActiveTab('all')
-      ;(async () => {
-        const items = await Promise.all((editing.media || []).map(async (id) => {
-          try {
-            const m = await (await fetch(`${API}/media/${id}/meta`)).json()
-            return { id, url: `${API}/media/${id}`, content_type: m.content_type, alt: m.alt || '' }
-          } catch { return { id, url: `${API}/media/${id}`, content_type: '', alt: '' } }
-        }))
-        setMedia(items)
-      })()
+        ; (async () => {
+          const items = await Promise.all((editing.media || []).map(async (id) => {
+            try {
+              const m = await (await fetch(`${API}/media/${id}/meta`)).json()
+              return { id, url: `${API}/media/${id}`, content_type: m.content_type, alt: m.alt || '' }
+            } catch { return { id, url: `${API}/media/${id}`, content_type: '', alt: '' } }
+          }))
+          setMedia(items)
+        })()
     } else {
       setLinkMode('off'); setUtmCampaign('')
       setText(''); setVariants({}); setThread([]); setSelected({}); setWhen(nowLocalInput())
@@ -131,13 +135,16 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         const m = await res.json()
         setMedia((prev) => [...prev, { id: m.id, url: `${API}${m.url}`, content_type: m.content_type || file.type, alt: '' }])
       }
-    } catch (err) { console.error('Media upload failed:', err) } finally { setUploading(false) }
+    } catch (err) {
+      console.error('Media upload failed:', err)
+      toast('Upload failed — ' + err.message, 'err')
+    } finally { setUploading(false) }
   }
   const removeMedia = (id) => setMedia((prev) => prev.filter((m) => m.id !== id))
   const setAlt = (id, alt) => setMedia((prev) => prev.map((m) => (m.id === id ? { ...m, alt } : m)))
   const saveAlt = (m) => fetch(`${API}/media/${m.id}`, {
     method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ alt: m.alt }),
-  }).catch(() => {})
+  }).catch(() => { })
 
   const payload = () => ({
     text: text.trim(), platforms: chosen.map((a) => a.id),
@@ -150,12 +157,20 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const schedule = () => {
     if (!canSchedule) return
     if (isEditing) onUpdate(editing.id, { ...payload(), status: STATUS.SCHEDULED })
-    else { onSchedule(createPost({ ...payload(), status: STATUS.SCHEDULED })); reset() }
+    else {
+      onSchedule(createPost({ ...payload(), status: STATUS.SCHEDULED }));
+      toast('Post scheduled')
+      reset()
+    }
   }
   const saveDraft = () => {
     if (!canDraft) return
     if (isEditing) onUpdate(editing.id, { ...payload(), status: STATUS.DRAFT })
-    else { onSaveDraft(createPost({ ...payload(), status: STATUS.DRAFT })); reset() }
+    else {
+      onSaveDraft(createPost({ ...payload(), status: STATUS.DRAFT }));
+      toast('Draft saved')
+      reset()
+    }
   }
 
   const videoToBluesky = hasVideo && chosen.some((a) => a.platform === 'bluesky')
@@ -236,7 +251,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         </div>
       )}
 
-    {/* --- account picker: primary, stays visible --- */}
+      {/* --- account picker: primary, stays visible --- */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {accounts.length === 0 && <span className="font-mono text-[11px] text-muted">No accounts connected — see Accounts.</span>}
         {accounts.map((a) => (
@@ -335,7 +350,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         <p className="mt-2 font-mono text-[11px] text-muted">Threads/LinkedIn post only the first part; Bluesky &amp; Mastodon post the full chain.</p>
       )}
 
-      
+
       <div className="mt-4 flex items-center gap-3">
         <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
           className="rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-xs text-fg outline-none transition focus:border-coral [color-scheme:dark]" />
