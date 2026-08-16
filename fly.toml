@@ -1,0 +1,35 @@
+# fly.toml app configuration file generated for cadence-velarox on 2026-08-16T11:25:25-06:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'cadence-velarox'
+primary_region = 'sjc'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  PORT = '8080'
+  DATA_DIR = '/data'
+  PUBLIC_BASE_URL = 'https://cadence.velaroxsolutions.com'
+  OAUTH_REDIRECT_BASE = 'https://cadence.velaroxsolutions.com'
+  CORS_ORIGINS = 'https://cadence.velaroxsolutions.com,tauri://localhost,http://tauri.localhost'
+
+[mounts]
+  source = 'cadence_data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 1024
