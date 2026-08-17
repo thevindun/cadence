@@ -6,6 +6,9 @@ import TrendChart from './TrendChart.jsx'
 import BestTime from './BestTime.jsx'
 import FollowerGrowth from './FollowerGrowth.jsx'
 import LinkStats from './LinkStats.jsx'
+import { NavLink } from 'react-router-dom'
+import { exportPdf } from '../core/exportPdf.js'
+import { FileText } from 'lucide-react'
 
 const RANGES = [
   { id: 7, label: '7D' }, { id: 30, label: '30D' }, { id: 90, label: '90D' }, { id: 0, label: 'ALL' },
@@ -18,6 +21,17 @@ export default function Insights({ posts, onRefresh }) {
   const [days, setDays] = useState(30)
   const [refreshing, setRefreshing] = useState(false)
   const [tab, setTab] = useState('overview')
+
+  const doPdf = () => exportPdf({
+    title: 'Cadence Analytics',
+    range: days ? `Last ${days} days` : 'All time',
+    cards: cards.map((c) => ({ label: c.label, value: c.value.toLocaleString() })),
+    platforms: byPlatform.map((b) => ({ label: PLATFORMS[b.platform]?.label ?? b.platform, value: b.engagement.toLocaleString() })),
+    posts: topPosts.map(({ p, e }) => ({
+      date: new Date(p.scheduledAt).toLocaleDateString(),
+      text: p.text.slice(0, 80), value: e.toLocaleString(),
+    })),
+  })
 
   const published = useMemo(() => {
     const cutoff = days ? Date.now() - days * 86400000 : 0
@@ -152,6 +166,10 @@ export default function Insights({ posts, onRefresh }) {
                 className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 font-mono text-[11px] text-muted transition hover:border-coral/40 hover:text-fg disabled:opacity-40">
                 <Download size={13} strokeWidth={1.75} /> CSV
               </button>
+              <button onClick={doPdf} disabled={!published.length}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1 font-mono text-[11px] text-muted transition hover:border-coral/40 hover:text-fg disabled:opacity-40">
+                <FileText size={13} strokeWidth={1.75} /> PDF
+              </button>
             </div>
           </div>
 
@@ -195,7 +213,7 @@ export default function Insights({ posts, onRefresh }) {
               ) : (
                 <div className="flex flex-col gap-3">
                   {byPlatform.map((b) => (
-                    <div key={b.platform}>
+                    <NavLink key={b.platform} to={`/insights/${b.platform}`} className="block transition hover:opacity-80">
                       <div className="mb-1 flex items-center justify-between font-mono text-xs">
                         <span className="text-fg">{PLATFORMS[b.platform]?.label ?? b.platform}</span>
                         <span className="text-muted">{b.engagement.toLocaleString()}</span>
@@ -203,7 +221,7 @@ export default function Insights({ posts, onRefresh }) {
                       <div className="h-2 overflow-hidden rounded-full bg-elevated">
                         <div className="h-full rounded-full bg-fg/30" style={{ width: `${(b.engagement / maxPlat) * 100}%` }} />
                       </div>
-                    </div>
+                    </NavLink>
                   ))}
                 </div>
               )}

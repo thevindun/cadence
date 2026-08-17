@@ -31,6 +31,9 @@ import { useTheme } from './core/useTheme.js'
 import { useHotkeys } from './core/useHotkeys.js'
 import Settings from './components/Settings.jsx'
 import { Settings as SettingsIcon } from 'lucide-react'
+import PostDetail from './components/PostDetail.jsx'
+import PlatformDetail from './components/PlatformDetail.jsx'
+
 
 const NAV = [
   { id: 'queue', path: '/queue', label: 'Queue', icon: ListChecks },
@@ -56,7 +59,7 @@ export default function App() {
   { path: '/review', label: 'Review' },
   { path: '/team', label: 'Team' },
   ].find((n) => location.pathname.startsWith(n.path))?.label ?? ''
-  
+
   const [helpOpen, setHelpOpen] = useState(false)
   useHotkeys({
     'g': () => navigate('/queue'),
@@ -73,15 +76,15 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   useEffect(() => { setNavOpen(false) }, [location.pathname])   // close on navigate
   useEffect(() => {
-      ; (async () => {
-        await waitForServer()
-        const status = await authStatus()
-        if (!status.enabled) { setAuth({ state: 'ready', user: null }); return }
-        if (!status.has_users) { setAuth({ state: 'login', needsSetup: true }); return }
-        if (!getToken()) { setAuth({ state: 'login', needsSetup: false }); return }
-        const res = await fetch(`${API}/auth/me`)
-        setAuth(res.ok ? { state: 'ready', user: await res.json() } : { state: 'login', needsSetup: false })
-      })()
+    ; (async () => {
+      await waitForServer()
+      const status = await authStatus()
+      if (!status.enabled) { setAuth({ state: 'ready', user: null }); return }
+      if (!status.has_users) { setAuth({ state: 'login', needsSetup: true }); return }
+      if (!getToken()) { setAuth({ state: 'login', needsSetup: false }); return }
+      const res = await fetch(`${API}/auth/me`)
+      setAuth(res.ok ? { state: 'ready', user: await res.json() } : { state: 'login', needsSetup: false })
+    })()
   }, [])
 
   const { categories } = useCategories()
@@ -172,7 +175,7 @@ export default function App() {
           </button>
 
           {getToken() && (
-            
+
             <button onClick={async () => { await logout(); setAuth({ state: 'login', needsSetup: false }) }}
               className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm text-muted transition hover:text-red-400">
               <LogOut size={14} strokeWidth={1.75} /> Sign out
@@ -218,10 +221,12 @@ export default function App() {
             <Route path="*" element={<Navigate to="/queue" replace />} />
             <Route path="/accounts" element={<Accounts />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/insights/:platform" element={<PlatformDetail posts={posts} />} />
+            <Route path="/posts/:id" element={<PostDetail />} />
           </Routes>
         </main>
       </div>
-          {helpOpen && (
+      {helpOpen && (
         <div onClick={() => setHelpOpen(false)}
           className="fixed inset-0 z-50 grid place-items-center bg-black/60 p-4 backdrop-blur-sm">
           <div onClick={(e) => e.stopPropagation()}
@@ -229,9 +234,12 @@ export default function App() {
             <p className="mb-3 font-mono text-xs tracking-wider text-muted">KEYBOARD SHORTCUTS</p>
             <ul className="flex flex-col gap-2 text-sm">
               {[['G', 'Queue'], ['C', 'Calendar'], ['I', 'Insights'], ['L', 'Library'],
-                ['A', 'Accounts'], ['⌘/Ctrl + Enter', 'Schedule post'], ['?', 'This help']].map(([k, v]) => (
+              ['A', 'Accounts'], ['⌘/Ctrl + Enter', 'Schedule post'], ['?', 'This help']].map(([k, v]) => (
                 <li key={k} className="flex items-center justify-between">
                   <span className="text-muted">{v}</span>
+                  <NavLink to={`/posts/${post.id}`} className="min-w-0 flex-1 truncate text-sm text-fg transition hover:text-coral">
+                    {post.text}
+                  </NavLink>
                   <kbd className="rounded border border-line bg-elevated px-1.5 py-0.5 font-mono text-[11px] text-fg">{k}</kbd>
                 </li>
               ))}
