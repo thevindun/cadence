@@ -123,8 +123,10 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
 
   const chosen = accounts.filter((a) => selected[a.id])
   const limit = chosen.length ? Math.min(...chosen.map((a) => a.maxLen)) : null
+  const platformsInUse = [...new Set(chosen.map((a) => a.platform))]
+  const mastodonSelected = chosen.some((a) => a.platform === 'mastodon')
+  const pollActive = poll.options.filter((o) => o.trim()).length >= 2
   const effTab = activeTab !== 'all' && platformsInUse.includes(activeTab) ? activeTab : 'all'
-
   const activeText = effTab === 'all' ? text : (variants[effTab] ?? '')
   const activeLimit = effTab === 'all' ? limit : platMax(effTab)
   const setActiveText = (v) => (effTab === 'all' ? setText(v) : setVariants((s) => ({ ...s, [effTab]: v })))
