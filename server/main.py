@@ -272,12 +272,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Cadence API", lifespan=lifespan)
 
-app.add_middleware(
-    CORSMiddleware,
-        allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:5173,tauri://localhost,http://tauri.localhost").split(","),
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+
 
 SESSION_TTL_MS = 30 * 86400 * 1000
 _API_PREFIXES = ("/posts", "/media", "/accounts", "/categories", "/metrics", "/links", "/auth", "/users", "/notifications", "/inbox", "/settings")
@@ -336,7 +331,12 @@ async def auth_gate(request, call_next):
     return await call_next(request)
 
 
-
+app.add_middleware(
+    CORSMiddleware,
+        allow_origins=os.environ.get("CORS_ORIGINS", "http://localhost:5173,tauri://localhost,http://tauri.localhost").split(","),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ---- posts ----

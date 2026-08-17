@@ -73,7 +73,6 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)
   useEffect(() => { setNavOpen(false) }, [location.pathname])   // close on navigate
   useEffect(() => {
-    installAuthFetch()
       ; (async () => {
         await waitForServer()
         const status = await authStatus()
