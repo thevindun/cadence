@@ -18,26 +18,17 @@ import { useSettings } from '../core/useSettings.js'
 import { nextOpenSlot } from '../core/slots.js'
 import { Zap } from 'lucide-react'
 
-function nowLocalInput() {
-  const d = new Date(); d.setSeconds(0, 0)
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-}
-function isoToLocalInput(iso) {
-  const d = new Date(iso)
-  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-}
 const platMax = (p) => PLATFORMS[p]?.maxLen ?? 500
 
 export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, onCancelEdit }) {
   const [text, setText] = useState('')
-  const [variants, setVariants] = useState({})       // platform -> override text
+  const [variants, setVariants] = useState({})
   const [activeTab, setActiveTab] = useState('all')
   const [thread, setThread] = useState([])
   const [firstComment, setFirstComment] = useState('')
-  const [panel, setPanel] = useState(null)      // 'thread' | 'category' | 'links' | null
+  const [panel, setPanel] = useState(null)
   const togglePanel = (id) => setPanel((p) => (p === id ? null : id))
   const [selected, setSelected] = useState({})
-  const [when, setWhen] = useState(isoToLocalInput(new Date().toISOString(), tz))
   const [repeat, setRepeat] = useState(REPEAT.NONE)
   const [media, setMedia] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -54,7 +45,8 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const toast = useToast()
   const { settings } = useSettings()
   const tz = settings?.timezone || 'UTC'
-
+  const [when, setWhen] = useState(isoToLocalInput(new Date().toISOString(), tz))
+  const [fcOpen, setFcOpen] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const taRef = useRef(null)
 
@@ -102,7 +94,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
         })()
     } else {
       setLinkMode('off'); setUtmCampaign('')
-      setText(''); setVariants({}); setThread([]); setSelected({}); setWhen(nowLocalInput())
+      setText(''); setVariants({}); setThread([]); setSelected({}); setWhen(isoToLocalInput(new Date().toISOString(), tz))
       setRepeat(REPEAT.NONE); setMedia([]); setActiveTab('all')
       setFirstComment(''); setFcOpen(false)
     }
@@ -136,7 +128,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const delSeg = (i) => setThread((t) => t.filter((_, idx) => idx !== i))
   const reset = () => {
     setCategory(null)
-    setText(''); setVariants({}); setThread([]); setSelected({}); setWhen(nowLocalInput())
+    setText(''); setVariants({}); setThread([]); setSelected({}); setWhen(isoToLocalInput(new Date().toISOString(), tz))
     setRepeat(REPEAT.NONE); setMedia([]); setActiveTab('all')
     setFirstComment(''); setFcOpen(false)
     setLinkMode('off'); setUtmCampaign('')
@@ -379,13 +371,10 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
       )}
 
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
-        
           className="rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-xs text-fg outline-none transition focus:border-coral [color-scheme:dark]" />
-        <select value={repeat} onChange={(e) => setRepeat(e.target.value)}
-          className="rounded-lg border border-line bg-elevated px-2 py-2 font-mono text-xs text-fg outline-none transition focus:border-coral [color-scheme:dark]">
-            <span className="font-mono text-[10px] text-muted">{tz}</span>
+        <span className="font-mono text-[10px] text-muted">{tz}</span>
         {(settings?.slots?.length > 0) && (
           <button onClick={() => {
             const iso = nextOpenSlot(settings.slots, tz, [])
@@ -396,6 +385,8 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
             <Zap size={13} strokeWidth={1.75} /> NEXT SLOT
           </button>
         )}
+        <select value={repeat} onChange={(e) => setRepeat(e.target.value)}
+          className="rounded-lg border border-line bg-elevated px-2 py-2 font-mono text-xs text-fg outline-none transition focus:border-coral [color-scheme:dark]">
           <option value="none">Once</option><option value="daily">Daily</option>
           <option value="weekly">Weekly</option><option value="monthly">Monthly</option>
         </select>
@@ -403,7 +394,6 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
           {activeText.length}{activeLimit != null ? ` / ${activeLimit}` : ''}
         </span>
       </div>
-
       <div className="mt-4 flex gap-2">
         <button onClick={saveDraft} disabled={!canDraft}
           className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-line px-4 py-2 text-sm text-muted transition enabled:hover:border-coral/40 enabled:hover:text-fg disabled:cursor-not-allowed disabled:opacity-40">
