@@ -13,6 +13,10 @@ import { useToast } from '../core/useToast.jsx'
 import { useHotkeys } from '../core/useHotkeys.js'
 import EmojiPicker from './EmojiPicker.jsx'
 import { Smile } from 'lucide-react'
+import { localInputToISO, isoToLocalInput } from '../core/tz.js'
+import { useSettings } from '../core/useSettings.js'
+import { nextOpenSlot } from '../core/slots.js'
+import { Zap } from 'lucide-react'
 
 function nowLocalInput() {
   const d = new Date(); d.setSeconds(0, 0)
@@ -33,7 +37,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const [panel, setPanel] = useState(null)      // 'thread' | 'category' | 'links' | null
   const togglePanel = (id) => setPanel((p) => (p === id ? null : id))
   const [selected, setSelected] = useState({})
-  const [when, setWhen] = useState(nowLocalInput())
+  const [when, setWhen] = useState(isoToLocalInput(new Date().toISOString(), tz))
   const [repeat, setRepeat] = useState(REPEAT.NONE)
   const [media, setMedia] = useState([])
   const [uploading, setUploading] = useState(false)
@@ -48,6 +52,8 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const [linkMode, setLinkMode] = useState('off')
   const [utmCampaign, setUtmCampaign] = useState('')
   const toast = useToast()
+  const { settings } = useSettings()
+  const tz = settings?.timezone || 'UTC'
 
   const [emojiOpen, setEmojiOpen] = useState(false)
   const taRef = useRef(null)
@@ -83,7 +89,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
       setText(editing.text); setVariants(editing.variants || {}); setThread(editing.thread || [])
       setFirstComment(editing.first_comment || ''); setFcOpen(Boolean(editing.first_comment))
       setSelected(Object.fromEntries(editing.platforms.map((id) => [id, true])))
-      setWhen(isoToLocalInput(editing.scheduledAt)); setRepeat(editing.repeat || REPEAT.NONE)
+      setWhen(isoToLocalInput(editing.scheduledAt, tz)); setRepeat(editing.repeat || REPEAT.NONE)
       setActiveTab('all')
         ; (async () => {
           const items = await Promise.all((editing.media || []).map(async (id) => {
@@ -162,7 +168,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
 
   const payload = () => ({
     text: text.trim(), platforms: chosen.map((a) => a.id),
-    scheduledAt: new Date(when).toISOString(), repeat,
+    scheduledAt: localInputToISO(when, tz), repeat,
     media: media.map((m) => m.id), thread: thread.map((s) => s.trim()).filter(Boolean),
     variants: Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v)),
     first_comment: firstComment.trim(),
@@ -375,9 +381,21 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
 
       <div className="mt-4 flex items-center gap-3">
         <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
+        
           className="rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-xs text-fg outline-none transition focus:border-coral [color-scheme:dark]" />
         <select value={repeat} onChange={(e) => setRepeat(e.target.value)}
           className="rounded-lg border border-line bg-elevated px-2 py-2 font-mono text-xs text-fg outline-none transition focus:border-coral [color-scheme:dark]">
+            <span className="font-mono text-[10px] text-muted">{tz}</span>
+        {(settings?.slots?.length > 0) && (
+          <button onClick={() => {
+            const iso = nextOpenSlot(settings.slots, tz, [])
+            if (iso) { setWhen(isoToLocalInput(iso, tz)); toast('Dropped into next open slot') }
+            else toast('No open slot found', 'err')
+          }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-2 font-mono text-xs text-muted transition hover:border-coral/40 hover:text-coral">
+            <Zap size={13} strokeWidth={1.75} /> NEXT SLOT
+          </button>
+        )}
           <option value="none">Once</option><option value="daily">Daily</option>
           <option value="weekly">Weekly</option><option value="monthly">Monthly</option>
         </select>

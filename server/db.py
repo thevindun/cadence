@@ -184,6 +184,13 @@ def init_db():
             )
         """)
         c.execute("CREATE INDEX IF NOT EXISTS idx_notif_time ON notifications (created_at DESC)")
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                workspace_id TEXT PRIMARY KEY,
+                data         TEXT NOT NULL DEFAULT '{}',
+                updated_at   INTEGER NOT NULL
+            )
+        """)
         
 
 def _row_to_post(row) -> dict:
@@ -540,3 +547,17 @@ def mark_all_read(is_admin: bool = True):
             "UPDATE notifications SET read = 1 WHERE read = 0 AND (audience = 'all' OR (audience = 'admin' AND ?))",
             (1 if is_admin else 0,),
         )
+
+def get_settings(ws: str) -> dict:
+    with _conn() as c:
+        row = c.execute("SELECT data FROM settings WHERE workspace_id = ?", (ws,)).fetchone()
+    return json.loads(row["data"]) if row else {}
+
+
+def set_settings(ws: str, data: dict) -> dict:
+    with _conn() as c:
+        c.execute(
+            "INSERT OR REPLACE INTO settings (workspace_id, data, updated_at) VALUES (?, ?, ?)",
+            (ws, json.dumps(data), int(time.time() * 1000)),
+        )
+    return data

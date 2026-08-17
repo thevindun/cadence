@@ -29,6 +29,8 @@ import Onboarding from './components/Onboarding.jsx'
 import { Sun, Moon } from 'lucide-react'
 import { useTheme } from './core/useTheme.js'
 import { useHotkeys } from './core/useHotkeys.js'
+import Settings from './components/Settings.jsx'
+import { Settings as SettingsIcon } from 'lucide-react'
 
 const NAV = [
   { id: 'queue', path: '/queue', label: 'Queue', icon: ListChecks },
@@ -38,6 +40,7 @@ const NAV = [
   { id: 'insights', path: '/insights', label: 'Insights', icon: BarChart3 },
   { id: 'accounts', path: '/accounts', label: 'Accounts', icon: Plug },
   { id: 'inbox', path: '/inbox', label: 'Inbox', icon: InboxIcon },
+  { id: 'settings', path: '/settings', label: 'Settings', icon: SettingsIcon },
 ]
 
 export default function App() {
@@ -214,6 +217,8 @@ export default function App() {
             <Route path="/review" element={<Review onChange={() => { }} />} />
             <Route path="/team" element={<Team currentUserId={currentUser?.id} />} />
             <Route path="*" element={<Navigate to="/queue" replace />} />
+            <Route path="/accounts" element={<Accounts />} />
+            <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>
       </div>

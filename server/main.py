@@ -24,7 +24,7 @@ from db import (
     MEDIA_DIR, add_media, get_media, list_categories, add_category, delete_category, list_media, delete_media, add_snapshot, snapshots_since,
     add_follower_snapshot, follower_snapshots_since, create_link, get_link, add_click, click_counts, create_user, get_user_by_email, get_user, count_users,
     create_session, get_session, delete_session,list_users, delete_user, update_user_role, count_admins,
-    add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media
+    add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media, get_settings, set_settings
 )
 from notify import send_email
 from pathlib import Path
@@ -39,6 +39,18 @@ CATEGORY_COLORS = ["#5B8CFF", "#34D399", "#FBBF24", "#A78BFA", "#F472B6", "#22D3
 
 PUBLIC_BASE = os.environ.get("PUBLIC_BASE_URL", "http://localhost:8000")
 _URL_RE = re.compile(r'https?://\S+')
+
+DEFAULT_SETTINGS = {
+    "timezone": "UTC",
+    "slots": [],                     # [{"day": 0-6, "time": "09:00"}]
+    "default_platforms": [],
+    "paused": False,
+}
+
+
+def _ws(request: Request) -> str:
+    # Single-workspace for now; real per-user resolution lands with P16.5.
+    return "default"
 
 
 def _append_utm(url, source, campaign):
@@ -175,6 +187,8 @@ async def _publish(post: dict):
         _queue_next_occurrence(post)
 
 async def _publish_due():
+    if get_settings("default").get("paused"):
+        return
     now = datetime.now(timezone.utc)
     for post in list_posts():
         if post["status"] == "scheduled" and _parse_iso(post["scheduledAt"]) <= now:
@@ -266,7 +280,7 @@ app.add_middleware(
 )
 
 SESSION_TTL_MS = 30 * 86400 * 1000
-_API_PREFIXES = ("/posts", "/media", "/accounts", "/categories", "/metrics", "/links", "/auth", "/users", "/notifications", "/inbox")
+_API_PREFIXES = ("/posts", "/media", "/accounts", "/categories", "/metrics", "/links", "/auth", "/users", "/notifications", "/inbox", "/settings")
 _OPEN = {"/auth/status", "/auth/login", "/auth/register"}
 
 
@@ -377,6 +391,18 @@ async def refresh_metrics() -> list[dict]:
     await _refresh_all_metrics()
     return list_posts()
 
+#---    settings    ---
+
+@app.get("/settings")
+def settings_get(request: Request) -> dict:
+    return {**DEFAULT_SETTINGS, **get_settings(_ws(request))}
+
+
+@app.put("/settings")
+def settings_put(body: dict, request: Request) -> dict:
+    ws = _ws(request)
+    merged = {**DEFAULT_SETTINGS, **get_settings(ws), **body}
+    return set_settings(ws, merged)
 
 # ---- media ----
 @app.post("/media")
