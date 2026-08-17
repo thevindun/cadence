@@ -12,6 +12,9 @@ class PlatformMetrics(BaseModel):
     likes: int = 0
     reposts: int = 0
     replies: int = 0
+    impressions: int | None = None
+    reach: int | None = None
+    views: int | None = None
 
 
 class Post(BaseModel):

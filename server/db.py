@@ -126,9 +126,17 @@ def init_db():
                 likes    INTEGER NOT NULL,
                 reposts  INTEGER NOT NULL,
                 replies  INTEGER NOT NULL,
+                impressions INTEGER,
+                reach       INTEGER,
+                views       INTEGER,
                 taken_at INTEGER NOT NULL
             )
+            
         """)
+        scols = {r["name"] for r in c.execute("PRAGMA table_info(metric_snapshots)").fetchall()}
+        for col in ("impressions", "reach", "views"):
+            if col not in scols:
+                c.execute(f"ALTER TABLE metric_snapshots ADD COLUMN {col} INTEGER")
         c.execute("CREATE INDEX IF NOT EXISTS idx_snap_time ON metric_snapshots (taken_at)")
 
         c.execute("""
@@ -431,16 +439,22 @@ def delete_media(media_id: str):
 def add_snapshot(post_id, target, m, taken_at):
     with _conn() as c:
         c.execute(
-            "INSERT INTO metric_snapshots (post_id, target, likes, reposts, replies, taken_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (post_id, target, m.get("likes", 0), m.get("reposts", 0), m.get("replies", 0), taken_at),
+            """INSERT INTO metric_snapshots
+               (post_id, target, likes, reposts, replies, impressions, reach, views, taken_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (post_id, target, m.get("likes", 0), m.get("reposts", 0), m.get("replies", 0),
+             m.get("impressions"), m.get("reach"), m.get("views"), taken_at),
         )
 
 
-def snapshots_since(since_ms: int) -> list[dict]:
+def snapshots_since(since_ms: int, ws: str) -> list[dict]:
     with _conn() as c:
         rows = c.execute(
-            "SELECT post_id, target, likes, reposts, replies, taken_at FROM metric_snapshots WHERE taken_at >= ? ORDER BY taken_at",
-            (since_ms,),
+            """SELECT s.post_id, s.target, s.likes, s.reposts, s.replies,
+                      s.impressions, s.reach, s.views, s.taken_at
+               FROM metric_snapshots s JOIN posts p ON p.id = s.post_id
+               WHERE s.taken_at >= ? AND p.workspace_id = ? ORDER BY s.taken_at""",
+            (since_ms, ws),
         ).fetchall()
     return [dict(r) for r in rows]
 
