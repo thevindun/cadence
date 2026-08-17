@@ -17,6 +17,9 @@ import { localInputToISO, isoToLocalInput } from '../core/tz.js'
 import { useSettings } from '../core/useSettings.js'
 import { nextOpenSlot } from '../core/slots.js'
 import { Zap } from 'lucide-react'
+import AiAssist from './AiAssist.jsx'
+import { Sparkles } from 'lucide-react'
+import { Hash, BarChart3 } from 'lucide-react'
 
 const platMax = (p) => PLATFORMS[p]?.maxLen ?? 500
 
@@ -50,6 +53,15 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const [emojiOpen, setEmojiOpen] = useState(false)
   const taRef = useRef(null)
 
+  const [poll, setPoll] = useState({ options: ['', ''], expires_in: 86400, multiple: false })
+  const [groups, setGroups] = useState([])
+  const loadGroups = async () => {
+    try { setGroups(await (await fetch(`${API}/hashtags`)).json()) } catch {}
+  }
+  useEffect(() => { loadGroups() }, [])
+
+  const appendTags = (tags) => setActiveText((activeText.trimEnd() + '\n\n' + tags.join(' ')).trim())
+
   const insertEmoji = (emoji) => {
     const ta = taRef.current
     if (!ta) { setActiveText(activeText + emoji); return }
@@ -57,6 +69,14 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
     setActiveText(activeText.slice(0, s) + emoji + activeText.slice(e))
     requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + emoji.length, s + emoji.length) })
   }
+
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiEnabled, setAiEnabled] = useState(false)
+  useEffect(() => {
+    (async () => {
+      try { setAiEnabled((await (await fetch(`${API}/ai/status`)).json()).enabled) } catch {}
+    })()
+  }, [])
 
   useEffect(() => {
     (async () => {
@@ -103,7 +123,6 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
 
   const chosen = accounts.filter((a) => selected[a.id])
   const limit = chosen.length ? Math.min(...chosen.map((a) => a.maxLen)) : null
-  const platformsInUse = [...new Set(chosen.map((a) => a.platform))]
   const effTab = activeTab !== 'all' && platformsInUse.includes(activeTab) ? activeTab : 'all'
 
   const activeText = effTab === 'all' ? text : (variants[effTab] ?? '')
@@ -162,6 +181,9 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
     text: text.trim(), platforms: chosen.map((a) => a.id),
     scheduledAt: localInputToISO(when, tz), repeat,
     media: media.map((m) => m.id), thread: thread.map((s) => s.trim()).filter(Boolean),
+    poll: pollActive && !media.length
+      ? { ...poll, options: poll.options.map((o) => o.trim()).filter(Boolean).slice(0, 4) }
+      : {},
     variants: Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v)),
     first_comment: firstComment.trim(),
     link_mode: linkMode, utm_campaign: utmCampaign
@@ -249,8 +271,19 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
           <Smile size={15} strokeWidth={1.75} />
         </button>
         {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
+          {aiEnabled && (
+          <button onClick={() => setAiOpen(true)}
+            className="absolute bottom-2 right-9 grid h-6 w-6 place-items-center rounded text-muted transition hover:text-coral">
+            <Sparkles size={15} strokeWidth={1.75} />
+          </button>
+        )}
       </div>
- 
+        
+        {aiOpen && (
+        <AiAssist platform={effTab === 'all' ? 'social media' : PLATFORMS[effTab]?.label}
+          maxLen={activeLimit ?? 300} onPick={setActiveText} onClose={() => setAiOpen(false)} />
+      )}
+
       {media.length > 0 && (
         <div className="mt-3 flex flex-col gap-2">
           {media.map((m) => (
@@ -342,6 +375,31 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
           </div>
         </Collapsible>
 
+        <Collapsible icon={Hash} label="HASHTAG GROUPS" active={false}
+          open={panel === 'hashtags'} onToggle={() => togglePanel('hashtags')}>
+          <div className="flex flex-wrap items-center gap-2">
+            {groups.map((g) => (
+              <span key={g.id} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated px-2 py-0.5">
+                <button onClick={() => appendTags(g.tags)} title={g.tags.join(' ')}
+                  className="font-mono text-[11px] text-fg transition hover:text-coral">{g.name}</button>
+                <button onClick={async () => { await fetch(`${API}/hashtags/${g.id}`, { method: 'DELETE' }); loadGroups() }}
+                  className="text-muted transition hover:text-red-400"><X size={11} strokeWidth={2} /></button>
+              </span>
+            ))}
+            <button onClick={async () => {
+              const name = prompt('Group name'); if (!name?.trim()) return
+              const tags = prompt('Hashtags (space separated)'); if (!tags?.trim()) return
+              await fetch(`${API}/hashtags`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.trim(), tags: tags.trim().split(/\s+/) }) })
+              loadGroups()
+            }}
+              className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-muted transition hover:border-coral/40 hover:text-fg">
+              + New group
+            </button>
+          </div>
+          <p className="mt-2 font-mono text-[10px] text-muted">Click a group to append its tags to the caption.</p>
+        </Collapsible>
+
         <Collapsible icon={Link2} label="LINK TRACKING" active={linkMode !== 'off'}
           open={panel === 'links'} onToggle={() => togglePanel('links')}>
           <div className="flex flex-wrap items-center gap-2">
@@ -357,6 +415,34 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
             )}
           </div>
         </Collapsible>
+
+        {mastodonSelected && (
+          <Collapsible icon={BarChart3} label="POLL — MASTODON ONLY" active={pollActive}
+            open={panel === 'poll'} onToggle={() => togglePanel('poll')}>
+            {poll.options.map((o, i) => (
+              <input key={i} value={o} placeholder={`Option ${i + 1}`}
+                onChange={(e) => setPoll((p) => ({ ...p, options: p.options.map((x, j) => j === i ? e.target.value : x) }))}
+                className="mb-2 w-full rounded-lg border border-line bg-elevated px-3 py-1.5 text-sm text-fg placeholder:text-muted outline-none focus:border-coral" />
+            ))}
+            {poll.options.length < 4 && (
+              <button onClick={() => setPoll((p) => ({ ...p, options: [...p.options, ''] }))}
+                className="font-mono text-[11px] text-muted transition hover:text-coral">+ ADD OPTION</button>
+            )}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select value={poll.expires_in} onChange={(e) => setPoll((p) => ({ ...p, expires_in: Number(e.target.value) }))}
+                className="rounded-lg border border-line bg-elevated px-2 py-1 font-mono text-[11px] text-fg outline-none focus:border-coral">
+                <option value={3600}>1 hour</option><option value={86400}>1 day</option>
+                <option value={259200}>3 days</option><option value={604800}>1 week</option>
+              </select>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 font-mono text-[11px] text-muted">
+                <input type="checkbox" checked={poll.multiple} className="accent-coral"
+                  onChange={(e) => setPoll((p) => ({ ...p, multiple: e.target.checked }))} />
+                allow multiple
+              </label>
+            </div>
+            {media.length > 0 && <p className="mt-2 font-mono text-[10px] text-red-400">Mastodon can't combine a poll with media — the poll will be dropped.</p>}
+          </Collapsible>
+        )}
       </div>
 
       {/* --- warnings --- */}

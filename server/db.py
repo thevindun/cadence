@@ -15,8 +15,8 @@ DB_PATH = DATA_DIR / "cadence.db"
 MEDIA_DIR = DATA_DIR / "media"
 MEDIA_DIR.mkdir(exist_ok=True)
 
-_JSON_COLS = {"platforms", "results", "metrics", "media", "thread", "variants"}
-_MUTABLE = {"text", "platforms", "scheduledAt", "status", "results", "metrics", "repeat", "media", "thread", "variants", "first_comment", "category", "link_mode", "utm_campaign"}
+_JSON_COLS = {"platforms", "results", "metrics", "media", "thread", "variants", "poll"}
+_MUTABLE = {"text", "platforms", "scheduledAt", "status", "results", "metrics", "repeat", "media", "thread", "variants", "first_comment", "category", "link_mode", "utm_campaign", "poll"}
 
 @contextmanager
 def _conn():
@@ -48,6 +48,7 @@ def init_db():
                 category    TEXT,
                 link_mode    TEXT NOT NULL DEFAULT 'off',
                 utm_campaign TEXT NOT NULL DEFAULT '',
+                poll        TEXT NOT NULL DEFAULT '{}',
                 createdAt   INTEGER NOT NULL
             )
         """)
@@ -70,6 +71,8 @@ def init_db():
             c.execute("ALTER TABLE posts ADD COLUMN link_mode TEXT NOT NULL DEFAULT 'off'")
         if "utm_campaign" not in cols:
             c.execute("ALTER TABLE posts ADD COLUMN utm_campaign TEXT NOT NULL DEFAULT ''")
+        if "poll" not in cols:
+            c.execute("ALTER TABLE posts ADD COLUMN poll TEXT NOT NULL DEFAULT '{}'")
         c.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 id           TEXT PRIMARY KEY,   -- e.g. "bluesky:you.bsky.social"
@@ -191,6 +194,16 @@ def init_db():
                 updated_at   INTEGER NOT NULL
             )
         """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS hashtag_groups (
+                id           TEXT PRIMARY KEY,
+                name         TEXT NOT NULL,
+                tags         TEXT NOT NULL,
+                workspace_id TEXT NOT NULL DEFAULT 'ws_local',
+                created_at   INTEGER NOT NULL
+            )
+        """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_htg_ws ON hashtag_groups (workspace_id)")
         
 
 def _row_to_post(row) -> dict:
@@ -211,7 +224,30 @@ def _row_to_post(row) -> dict:
         "category": row["category"],
         "link_mode": row["link_mode"],
         "utm_campaign": row["utm_campaign"],
+        "poll": json.loads(row["poll"]),
     }
+
+def list_hashtag_groups(ws: str) -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT * FROM hashtag_groups WHERE workspace_id = ? ORDER BY created_at", (ws,)
+        ).fetchall()
+    return [{**dict(r), "tags": json.loads(r["tags"])} for r in rows]
+
+
+def add_hashtag_group(name: str, tags: list[str], ws: str) -> dict:
+    gid = f"htg_{uuid.uuid4().hex[:8]}"
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO hashtag_groups (id, name, tags, workspace_id, created_at) VALUES (?, ?, ?, ?, ?)",
+            (gid, name, json.dumps(tags), ws, int(time.time() * 1000)),
+        )
+    return {"id": gid, "name": name, "tags": tags}
+
+
+def delete_hashtag_group(gid: str, ws: str):
+    with _conn() as c:
+        c.execute("DELETE FROM hashtag_groups WHERE id = ? AND workspace_id = ?", (gid, ws))
 
 
 def list_posts() -> list[dict]:
@@ -230,8 +266,8 @@ def upsert_post(post: Post) -> dict:
     with _conn() as c:
         c.execute(
             """INSERT OR REPLACE INTO posts
-               (id, text, platforms, scheduledAt, status, results, metrics, repeat, media, thread, variants, first_comment, category, link_mode, utm_campaign, createdAt)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, text, platforms, scheduledAt, status, results, metrics, repeat, media, thread, variants, first_comment, category, link_mode, utm_campaign, poll, createdAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 post.id,
                 post.text,
@@ -248,6 +284,7 @@ def upsert_post(post: Post) -> dict:
                 post.category,
                 post.link_mode,
                 post.utm_campaign,
+                json.dumps(post.poll),
                 post.createdAt,
             ),
         )

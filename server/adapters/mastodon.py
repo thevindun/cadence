@@ -58,7 +58,14 @@ class MastodonAdapter(Adapter):
                     media_ids.append(remote_id)
                 form = {"status": post["text"]}
                 if media_ids:
-                    form["media_ids[]"] = media_ids           # httpx repeats the key per id
+                    form["media_ids[]"] = media_ids
+
+                poll = post.get("poll") or {}
+                opts = [o.strip() for o in (poll.get("options") or []) if o.strip()]
+                if len(opts) >= 2 and not media_ids:   # Mastodon: poll OR media, never both
+                    form["poll[options][]"] = opts[:4]
+                    form["poll[expires_in]"] = str(int(poll.get("expires_in") or 86400))
+                    form["poll[multiple]"] = "true" if poll.get("multiple") else "false"         # httpx repeats the key per id
                 r = await client.post(
                     f"{self._base}/api/v1/statuses",
                     headers={**self._headers(), "Idempotency-Key": post["id"]},

@@ -4,6 +4,7 @@ import calendar
 import uuid
 import os
 import re
+import ai
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
@@ -24,7 +25,7 @@ from db import (
     MEDIA_DIR, add_media, get_media, list_categories, add_category, delete_category, list_media, delete_media, add_snapshot, snapshots_since,
     add_follower_snapshot, follower_snapshots_since, create_link, get_link, add_click, click_counts, create_user, get_user_by_email, get_user, count_users,
     create_session, get_session, delete_session,list_users, delete_user, update_user_role, count_admins,
-    add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media, get_settings, set_settings
+    add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media, get_settings, set_settings, list_hashtag_groups, add_hashtag_group, delete_hashtag_group
 )
 from notify import send_email
 from pathlib import Path
@@ -275,8 +276,8 @@ app = FastAPI(title="Cadence API", lifespan=lifespan)
 
 
 SESSION_TTL_MS = 30 * 86400 * 1000
-_API_PREFIXES = ("/posts", "/media", "/accounts", "/categories", "/metrics", "/links", "/auth", "/users", "/notifications", "/inbox", "/settings")
-_OPEN = {"/auth/status", "/auth/login", "/auth/register"}
+_API_PREFIXES = ("/posts", "/media", "/accounts", "/categories", "/metrics", "/links", "/auth", "/users", "/notifications", "/inbox", "/settings", "/ai", "/hashtags")
+_OPEN = {"/auth/status", "/auth/login", "/auth/register", "/ai/status"}
 
 
 def _now_ms() -> int:
@@ -385,11 +386,44 @@ def remove_post(post_id: str) -> dict:
     delete_post(post_id)
     return {"ok": True, "id": post_id}
 
+
 # ---- metrics ----
 @app.post("/metrics/refresh")
 async def refresh_metrics() -> list[dict]:
     await _refresh_all_metrics()
     return list_posts()
+
+# ---- AI ----
+
+@app.get("/ai/status")
+def ai_status() -> dict:
+    return {"enabled": ai.is_enabled()}
+
+
+@app.post("/ai/captions")
+async def ai_captions(body: dict, request: Request) -> dict:
+    prompt = (body.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(422, "prompt is required")
+    if not ai.is_enabled():
+        raise HTTPException(503, "AI isn't configured on this server")
+
+    ws = _ws(request)
+    recent = [p["text"] for p in list_posts()
+                  if p["status"] == "published" and p["text"]][-5:] if body.get("match_voice") else None
+    try:
+        options = await ai.generate(
+            prompt,
+            body.get("platform") or "social media",
+            min(int(body.get("count") or 3), 5),
+            int(body.get("max_len") or 300),
+            (body.get("tone") or "").strip(),
+            recent,
+        )
+    except Exception as e:
+        raise HTTPException(502, f"AI request failed: {e}")
+    return {"options": options}
+
 
 #---    settings    ---
 
@@ -403,6 +437,7 @@ def settings_put(body: dict, request: Request) -> dict:
     ws = _ws(request)
     merged = {**DEFAULT_SETTINGS, **get_settings(ws), **body}
     return set_settings(ws, merged)
+
 
 # ---- media ----
 @app.post("/media")
@@ -783,8 +818,31 @@ async def inbox_reply(body: dict) -> dict:
         raise HTTPException(400, res.get("error") or "reply failed")
     return {"ok": True}
 
+@app.get("/hashtags")
+def hashtags_list(request: Request) -> list[dict]:
+    return list_hashtag_groups(_ws(request))
+
+
+@app.post("/hashtags")
+def hashtags_create(body: dict, request: Request) -> dict:
+    name = (body.get("name") or "").strip()
+    raw = body.get("tags") or []
+    tags = [t if t.startswith("#") else f"#{t}" for t in
+            (raw if isinstance(raw, list) else str(raw).split()) if t.strip()]
+    if not name or not tags:
+        raise HTTPException(422, "name and tags are required")
+    return add_hashtag_group(name, tags, _ws(request))
+
+
+@app.delete("/hashtags/{gid}")
+def hashtags_delete(gid: str, request: Request) -> dict:
+    delete_hashtag_group(gid, _ws(request))
+    return {"ok": True, "id": gid}
+
 # Serve the built SPA (production single-origin). MUST be after all API routes.
 _DIST = Path(os.environ.get("FRONTEND_DIST", str(Path(__file__).parent.parent / "dist")))
 if _DIST.exists():
     app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="spa")
+
+
 
