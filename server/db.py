@@ -16,7 +16,7 @@ MEDIA_DIR = DATA_DIR / "media"
 MEDIA_DIR.mkdir(exist_ok=True)
 
 _JSON_COLS = {"platforms", "results", "metrics", "media", "thread", "variants", "poll"}
-_MUTABLE = {"text", "platforms", "scheduledAt", "status", "results", "metrics", "repeat", "media", "thread", "variants", "first_comment", "category", "link_mode", "utm_campaign", "poll"}
+_MUTABLE = {"text", "platforms", "scheduledAt", "status", "results", "metrics", "repeat", "media", "thread", "variants", "first_comment", "category", "link_mode", "utm_campaign", "poll", "evergreen" , "last_used"}
 
 @contextmanager
 def _conn():
@@ -50,6 +50,8 @@ def init_db():
                 utm_campaign TEXT NOT NULL DEFAULT '',
                 poll        TEXT NOT NULL DEFAULT '{}',
                 createdAt   INTEGER NOT NULL
+                evergreen   INTEGER NOT NULL DEFAULT 0,
+                last_used   INTEGER,
             )
         """)
         cols = {r["name"] for r in c.execute("PRAGMA table_info(posts)").fetchall()}
@@ -73,6 +75,10 @@ def init_db():
             c.execute("ALTER TABLE posts ADD COLUMN utm_campaign TEXT NOT NULL DEFAULT ''")
         if "poll" not in cols:
             c.execute("ALTER TABLE posts ADD COLUMN poll TEXT NOT NULL DEFAULT '{}'")
+        if "evergreen" not in cols:
+            c.execute("ALTER TABLE posts ADD COLUMN evergreen INTEGER NOT NULL DEFAULT 0")
+        if "last_used" not in cols:
+            c.execute("ALTER TABLE posts ADD COLUMN last_used INTEGER")
         c.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 id           TEXT PRIMARY KEY,   -- e.g. "bluesky:you.bsky.social"
@@ -212,7 +218,35 @@ def init_db():
             )
         """)
         c.execute("CREATE INDEX IF NOT EXISTS idx_htg_ws ON hashtag_groups (workspace_id)")
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS templates (
+                id           TEXT PRIMARY KEY,
+                name         TEXT NOT NULL,
+                data         TEXT NOT NULL,     -- JSON: text, thread, variants, first_comment, category, link_mode
+                workspace_id TEXT NOT NULL DEFAULT 'ws_local',
+                created_at   INTEGER NOT NULL
+            )
+        """)
+        c.execute("CREATE INDEX IF NOT EXISTS idx_tpl_ws ON templates (workspace_id)")
         
+
+def list_templates(ws: str) -> list[dict]:
+    with _conn() as c:
+        rows = c.execute("SELECT * FROM templates WHERE workspace_id = ? ORDER BY created_at DESC", (ws,)).fetchall()
+    return [{**dict(r), "data": json.loads(r["data"])} for r in rows]
+
+
+def add_template(name: str, data: dict, ws: str) -> dict:
+    tid = f"tpl_{uuid.uuid4().hex[:8]}"
+    with _conn() as c:
+        c.execute("INSERT INTO templates (id, name, data, workspace_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                  (tid, name, json.dumps(data), ws, int(time.time() * 1000)))
+    return {"id": tid, "name": name, "data": data}
+
+
+def delete_template(tid: str, ws: str):
+    with _conn() as c:
+        c.execute("DELETE FROM templates WHERE id = ? AND workspace_id = ?", (tid, ws))
 
 def _row_to_post(row) -> dict:
     return {
@@ -233,6 +267,8 @@ def _row_to_post(row) -> dict:
         "link_mode": row["link_mode"],
         "utm_campaign": row["utm_campaign"],
         "poll": json.loads(row["poll"]),
+        "evergreen": bool(row["evergreen"]),
+        "last_used": row["last_used"]
     }
 
 def list_hashtag_groups(ws: str) -> list[dict]:
@@ -274,8 +310,8 @@ def upsert_post(post: Post) -> dict:
     with _conn() as c:
         c.execute(
             """INSERT OR REPLACE INTO posts
-               (id, text, platforms, scheduledAt, status, results, metrics, repeat, media, thread, variants, first_comment, category, link_mode, utm_campaign, poll, createdAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               (id, text, platforms, scheduledAt, status, results, metrics, repeat, media, thread, variants, first_comment, category, link_mode, utm_campaign, poll, createdAt, evergreen, last_used)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 post.id,
                 post.text,
@@ -294,10 +330,20 @@ def upsert_post(post: Post) -> dict:
                 post.utm_campaign,
                 json.dumps(post.poll),
                 post.createdAt,
+                
             ),
         )
     return post.model_dump()
 
+
+def evergreen_pool(ws: str) -> list[dict]:
+    """Evergreen posts, least-recently-used first."""
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT * FROM posts WHERE workspace_id = ? AND evergreen = 1 AND status = 'published'
+               ORDER BY COALESCE(last_used, 0) ASC""", (ws,)
+        ).fetchall()
+    return [_row_to_post(r) for r in rows]
 
 def patch_post(post_id: str, changes: dict) -> dict | None:
     existing = get_post(post_id)

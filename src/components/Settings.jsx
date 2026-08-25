@@ -31,6 +31,11 @@ export default function Settings() {
         </select>
         <p className="mt-2 text-xs text-muted">All scheduling times are interpreted in this zone.</p>
       </section>
+      <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm text-muted">
+        <input type="checkbox" checked={!!settings.evergreen_fill} className="accent-coral"
+          onChange={(e) => save({ evergreen_fill: e.target.checked })} />
+        Auto-fill empty slots from evergreen posts
+      </label>
 
       <section className="rounded-xl border border-line bg-surface p-5">
         <p className="mb-3 font-mono text-xs tracking-wider text-muted">POSTING SCHEDULE</p>
@@ -82,6 +87,11 @@ export default function Settings() {
             : 'Posts publish at their scheduled time.'}
         </p>
       </section>
+      <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm text-muted">
+        <input type="checkbox" checked={!!settings.evergreen_fill} className="accent-coral"
+          onChange={(e) => save({ evergreen_fill: e.target.checked })} />
+        Auto-fill empty slots from evergreen posts
+      </label>
     </div>
   )
 }

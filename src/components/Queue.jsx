@@ -3,6 +3,9 @@ import { STATUS, PLATFORMS } from '../core/types.js'
 import { Pencil, Trash2, Repeat, Image as ImageIcon, MessageSquare, ListChecks } from 'lucide-react'
 import { useCategories } from '../core/useCategories.js'
 import EmptyState from './EmptyState.jsx'
+import { Recycle } from 'lucide-react'
+import { Search, Trash2, CheckSquare, Square, Copy } from 'lucide-react'
+import { API } from '../core/api.js'
 
 const EDITABLE = new Set([STATUS.DRAFT, STATUS.SCHEDULED, STATUS.FAILED])
 
@@ -23,6 +26,31 @@ export default function Queue({ posts, onEdit, onDelete, loading }) {
   const catOf = (id) => categories.find((c) => c.id === id)
 
   const sorted = [...posts].sort((a, b) => new Date(a.scheduledAt) - new Date(b.scheduledAt))
+  
+    const [q, setQ] = useState('')
+  const [status, setStatus] = useState('all')
+  const [sel, setSel] = useState({})
+
+  const filtered = sorted.filter((p) => {
+    if (status !== 'all' && p.status !== status) return false
+    if (!q.trim()) return true
+    const hay = (p.text + ' ' + (p.thread || []).join(' ')).toLowerCase()
+    return hay.includes(q.trim().toLowerCase())
+  })
+
+  const selIds = Object.keys(sel).filter((k) => sel[k])
+  const allSelected = filtered.length > 0 && filtered.every((p) => sel[p.id])
+  const toggleAll = () => setSel(allSelected ? {} : Object.fromEntries(filtered.map((p) => [p.id, true])))
+
+  const bulkDelete = async () => {
+    if (!confirm(`Delete ${selIds.length} post(s)?`)) return
+    for (const id of selIds) await onDelete(id)
+    setSel({})
+  }
+  const bulkDuplicate = async () => {
+    for (const id of selIds) await fetch(`${API}/posts/${id}/duplicate`, { method: 'POST' })
+    setSel({})
+  }
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
@@ -37,12 +65,41 @@ export default function Queue({ posts, onEdit, onDelete, loading }) {
           ))}
         </div>
       ) : sorted.length === 0 ? (
-        <EmptyState 
-          icon={ListChecks} 
+        <EmptyState
+          icon={ListChecks}
           title="Nothing queued yet"
-          body="Write a post on the left, pick an account, choose a time, and it'll publish." 
+          body="Write a post on the left, pick an account, choose a time, and it'll publish."
         />
       ) : (
+
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[180px] flex-1">
+          <Search size={13} strokeWidth={1.75} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search posts…"
+            className="w-full rounded-lg border border-line bg-elevated py-1.5 pl-8 pr-3 text-sm text-fg placeholder:text-muted outline-none transition focus:border-coral" />
+        </div>
+        <div className="inline-flex rounded-lg border border-line p-0.5">
+          {['all', 'draft', 'scheduled', 'published', 'failed'].map((s) => (
+            <button key={s} onClick={() => setStatus(s)}
+              className={`rounded-md px-2 py-1 font-mono text-[10px] uppercase transition ${status === s ? 'bg-coral text-white' : 'text-muted hover:text-fg'}`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {selIds.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-coral/40 bg-coral/5 px-3 py-2">
+          <span className="font-mono text-[11px] text-coral">{selIds.length} selected</span>
+          <button onClick={bulkDuplicate} className="ml-auto inline-flex items-center gap-1.5 font-mono text-[11px] text-muted transition hover:text-fg">
+            <Copy size={12} strokeWidth={1.75} /> DUPLICATE
+          </button>
+          <button onClick={bulkDelete} className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted transition hover:text-red-400">
+            <Trash2 size={12} strokeWidth={1.75} /> DELETE
+          </button>
+          <button onClick={() => setSel({})} className="font-mono text-[11px] text-muted transition hover:text-fg">CLEAR</button>
+        </div>
+      )}
 
         <ul className="flex flex-col gap-2">
           {sorted.map((post) => (
@@ -77,6 +134,15 @@ export default function Queue({ posts, onEdit, onDelete, loading }) {
                   <Repeat size={13} strokeWidth={1.75} />
                 </span>
               )}
+
+              {post.status === 'published' && (
+                <button onClick={() => onUpdate(post.id, { evergreen: !post.evergreen })}
+                  title={post.evergreen ? 'Evergreen — will recycle' : 'Mark as evergreen'}
+                  className={`shrink-0 transition ${post.evergreen ? 'text-coral' : 'text-muted/40 hover:text-muted'}`}>
+                  <Recycle size={13} strokeWidth={1.75} />
+                </button>
+              )}
+
               <StatusPill status={post.status} />
               <span className="ml-auto flex items-center gap-1 opacity-100 transition md:opacity-0 md:group-hover:opacity-100">
                 {EDITABLE.has(post.status) && (

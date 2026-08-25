@@ -25,7 +25,8 @@ from db import (
     MEDIA_DIR, add_media, get_media, list_categories, add_category, delete_category, list_media, delete_media, add_snapshot, snapshots_since,
     add_follower_snapshot, follower_snapshots_since, create_link, get_link, add_click, click_counts, create_user, get_user_by_email, get_user, count_users,
     create_session, get_session, delete_session,list_users, delete_user, update_user_role, count_admins,
-    add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media, get_settings, set_settings, list_hashtag_groups, add_hashtag_group, delete_hashtag_group
+    add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media, get_settings, set_settings, list_hashtag_groups, add_hashtag_group, delete_hashtag_group,
+    evergreen_pool, list_workspaces, get_settings
 )
 from notify import send_email
 from pathlib import Path
@@ -129,6 +130,50 @@ def _next_occurrence(iso: str, repeat: str, now: datetime) -> datetime | None:
     while nxt <= now:            # collapse missed windows: exactly one make-up, next in future
         nxt = step(nxt)
     return nxt
+
+def _slot_times(settings, now):
+    """Upcoming slot datetimes (UTC) for the next 7 days."""
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(settings.get("timezone") or "UTC")
+    out = []
+    for d in range(8):
+        day = (now.astimezone(tz) + timedelta(days=d))
+        for s in settings.get("slots") or []:
+            if day.weekday() == (s["day"] - 1) % 7:      # JS Sun=0 -> Python Mon=0
+                h, m = map(int, s["time"].split(":"))
+                dt = day.replace(hour=h, minute=m, second=0, microsecond=0)
+                utc = dt.astimezone(timezone.utc)
+                if utc > now:
+                    out.append(utc)
+    return sorted(out)
+
+
+async def _fill_evergreen():
+    """Keep upcoming slots filled from the evergreen pool."""
+    now = datetime.now(timezone.utc)
+    for wsr in list_workspaces():
+        ws = wsr["id"]
+        settings = get_settings(ws)
+        if settings.get("paused") or not settings.get("slots") or not settings.get("evergreen_fill"):
+            continue
+        scheduled = {_parse_iso(p["scheduledAt"]) for p in list_posts(ws) if p["status"] == "scheduled"}
+        pool = evergreen_pool(ws)
+        if not pool:
+            continue
+        i = 0
+        for slot in _slot_times(settings, now)[:5]:      # fill up to 5 slots ahead
+            if slot in scheduled or i >= len(pool):
+                continue
+            src = pool[i]; i += 1
+            data = {k: v for k, v in src.items() if k not in ("results", "metrics", "workspace_id")}
+            data["id"] = f"post_{uuid.uuid4().hex[:12]}"
+            data["scheduledAt"] = slot.isoformat().replace("+00:00", "Z")
+            data["status"] = "scheduled"
+            data["evergreen"] = False          # the copy is a one-off
+            data["createdAt"] = int(time.time() * 1000)
+            upsert_post(Post(**data), ws)
+            patch_post(src["id"], {"last_used": int(time.time() * 1000)})
+            print(f"[evergreen] queued '{src['text'][:40]}' at {data['scheduledAt']}")
 
 def _queue_next_occurrence(post: dict):
     """A repeating post spawns its successor; the published one stays as history."""
@@ -242,7 +287,9 @@ async def _worker():
                 print(f"[worker] metrics error: {e}")
 
         await asyncio.sleep(POLL_SECONDS)
+        await _fill_evergreen()
         
+
 
 def _seed_from_env():
     # One-time: import .env Bluesky creds into the DB if nothing's stored yet.
@@ -276,7 +323,7 @@ app = FastAPI(title="Cadence API", lifespan=lifespan)
 
 
 SESSION_TTL_MS = 30 * 86400 * 1000
-_API_PREFIXES = ("/posts", "/media", "/accounts", "/categories", "/metrics", "/links", "/auth", "/users", "/notifications", "/inbox", "/settings", "/ai", "/hashtags")
+_API_PREFIXES = ("/posts", "/media", "/accounts", "/categories", "/metrics", "/links", "/auth", "/users", "/notifications", "/inbox", "/settings", "/ai", "/hashtags", "/templates")
 _OPEN = {"/auth/status", "/auth/login", "/auth/register", "/ai/status"}
 
 
@@ -386,6 +433,38 @@ def remove_post(post_id: str) -> dict:
     delete_post(post_id)
     return {"ok": True, "id": post_id}
 
+
+@app.get("/templates")
+def templates_list(request: Request) -> list[dict]:
+    return list_templates(_ws(request))
+
+
+@app.post("/templates")
+def templates_create(body: dict, request: Request) -> dict:
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(422, "name is required")
+    keep = ("text", "thread", "variants", "first_comment", "category", "link_mode", "utm_campaign")
+    return add_template(name, {k: body.get(k) for k in keep if body.get(k)}, _ws(request))
+
+
+@app.delete("/templates/{tid}")
+def templates_delete(tid: str, request: Request) -> dict:
+    delete_template(tid, _ws(request))
+    return {"ok": True, "id": tid}
+
+
+@app.post("/posts/{post_id}/duplicate")
+def post_duplicate(post_id: str, request: Request) -> dict:
+    ws = _ws(request)
+    src = get_post(post_id, ws)
+    if not src:
+        raise HTTPException(404, "Post not found")
+    data = {k: v for k, v in src.items() if k not in ("results", "metrics", "workspace_id")}
+    data["id"] = f"post_{uuid.uuid4().hex[:12]}"
+    data["status"] = "draft"
+    data["createdAt"] = int(time.time() * 1000)
+    return upsert_post(Post(**data), ws)
 
 # ---- metrics ----
 @app.post("/metrics/refresh")

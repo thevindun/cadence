@@ -19,8 +19,7 @@ import { nextOpenSlot } from '../core/slots.js'
 import { Zap } from 'lucide-react'
 import AiAssist from './AiAssist.jsx'
 import { Sparkles } from 'lucide-react'
-import { Hash, BarChart3 } from 'lucide-react'
-
+import { Hash, BarChart3, FileStack } from 'lucide-react'
 const platMax = (p) => PLATFORMS[p]?.maxLen ?? 500
 
 export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, onCancelEdit }) {
@@ -56,7 +55,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const [poll, setPoll] = useState({ options: ['', ''], expires_in: 86400, multiple: false })
   const [groups, setGroups] = useState([])
   const loadGroups = async () => {
-    try { setGroups(await (await fetch(`${API}/hashtags`)).json()) } catch {}
+    try { setGroups(await (await fetch(`${API}/hashtags`)).json()) } catch { }
   }
   useEffect(() => { loadGroups() }, [])
 
@@ -70,11 +69,34 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
     requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(s + emoji.length, s + emoji.length) })
   }
 
+  const [templates, setTemplates] = useState([])
+  const loadTemplates = async () => {
+    try { setTemplates(await (await fetch(`${API}/templates`)).json()) } catch { }
+  }
+  useEffect(() => { loadTemplates() }, [])
+
+  const applyTemplate = (t) => {
+    const d = t.data || {}
+    setText(d.text || ''); setThread(d.thread || []); setVariants(d.variants || {})
+    setFirstComment(d.first_comment || ''); setCategory(d.category || null)
+    setLinkMode(d.link_mode || 'off'); setUtmCampaign(d.utm_campaign || '')
+    toast(`Applied "${t.name}"`)
+  }
+
+  const saveTemplate = async () => {
+    const name = prompt('Template name'); if (!name?.trim()) return
+    await fetch(`${API}/templates`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), ...payload() })
+    })
+    loadTemplates(); toast('Template saved')
+  }
+
   const [aiOpen, setAiOpen] = useState(false)
   const [aiEnabled, setAiEnabled] = useState(false)
   useEffect(() => {
     (async () => {
-      try { setAiEnabled((await (await fetch(`${API}/ai/status`)).json()).enabled) } catch {}
+      try { setAiEnabled((await (await fetch(`${API}/ai/status`)).json()).enabled) } catch { }
     })()
   }, [])
 
@@ -273,15 +295,15 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
           <Smile size={15} strokeWidth={1.75} />
         </button>
         {emojiOpen && <EmojiPicker onPick={insertEmoji} onClose={() => setEmojiOpen(false)} />}
-          {aiEnabled && (
+        {aiEnabled && (
           <button onClick={() => setAiOpen(true)}
             className="absolute bottom-2 right-9 grid h-6 w-6 place-items-center rounded text-muted transition hover:text-coral">
             <Sparkles size={15} strokeWidth={1.75} />
           </button>
         )}
       </div>
-        
-        {aiOpen && (
+
+      {aiOpen && (
         <AiAssist platform={effTab === 'all' ? 'social media' : PLATFORMS[effTab]?.label}
           maxLen={activeLimit ?? 300} onPick={setActiveText} onClose={() => setAiOpen(false)} />
       )}
@@ -391,8 +413,10 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
             <button onClick={async () => {
               const name = prompt('Group name'); if (!name?.trim()) return
               const tags = prompt('Hashtags (space separated)'); if (!tags?.trim()) return
-              await fetch(`${API}/hashtags`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: name.trim(), tags: tags.trim().split(/\s+/) }) })
+              await fetch(`${API}/hashtags`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: name.trim(), tags: tags.trim().split(/\s+/) })
+              })
               loadGroups()
             }}
               className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-muted transition hover:border-coral/40 hover:text-fg">
@@ -415,6 +439,23 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
               <input value={utmCampaign} onChange={(e) => setUtmCampaign(e.target.value)} placeholder="campaign (optional)"
                 className="rounded-lg border border-line bg-elevated px-2 py-1 font-mono text-[11px] text-fg placeholder:text-muted outline-none transition focus:border-coral" />
             )}
+          </div>
+        </Collapsible>
+
+        <Collapsible icon={FileStack} label="TEMPLATES" active={false}
+          open={panel === 'templates'} onToggle={() => togglePanel('templates')}>
+          <div className="flex flex-wrap items-center gap-2">
+            {templates.map((t) => (
+              <span key={t.id} className="inline-flex items-center gap-1.5 rounded-full border border-line bg-elevated px-2 py-0.5">
+                <button onClick={() => applyTemplate(t)} className="font-mono text-[11px] text-fg transition hover:text-coral">{t.name}</button>
+                <button onClick={async () => { await fetch(`${API}/templates/${t.id}`, { method: 'DELETE' }); loadTemplates() }}
+                  className="text-muted transition hover:text-red-400"><X size={11} strokeWidth={2} /></button>
+              </span>
+            ))}
+            <button onClick={saveTemplate} disabled={!hasContent}
+              className="rounded-full border border-line px-2 py-0.5 font-mono text-[11px] text-muted transition enabled:hover:border-coral/40 enabled:hover:text-fg disabled:opacity-40">
+              + Save current
+            </button>
           </div>
         </Collapsible>
 
