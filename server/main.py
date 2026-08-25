@@ -173,7 +173,7 @@ async def _fill_evergreen():
         data["createdAt"] = int(time.time() * 1000)
         upsert_post(Post(**data))
         patch_post(src["id"], {"last_used": int(time.time() * 1000)})
-        log.info("evergreen queued '%s' at %s", src["text"][:40], data["scheduledAt"]) 
+        log.info("evergreen queued '%s' at %s", src["text"][:40], data["scheduledAt"])
         
 def _queue_next_occurrence(post: dict):
     """A repeating post spawns its successor; the published one stays as history."""
@@ -219,7 +219,7 @@ async def _publish(post: dict):
             detail = str(e) or getattr(e, "content", None) or getattr(e, "response", None)
             msg = f"{type(e).__name__}: {detail}" if detail else type(e).__name__
             results[target] = {"ok": False, "error": str(msg)[:300]}
-            import traceback; traceback.print_exc()
+            log.exception("publish failed post=%s target=%s", post["id"], target)
     all_ok = all(results.get(t, {}).get("ok") for t in post["platforms"])
     patch_post(post["id"], {"status": "published" if all_ok else "failed", "results": results})
 
@@ -230,8 +230,9 @@ async def _publish(post: dict):
         errs = "; ".join(f"{t}: {r.get('error')}" for t, r in results.items() if t != "_review" and not r.get("ok"))
         add_notification("failed", "Post failed", f"{snippet} — {errs}", post["id"])
         send_email("A scheduled post failed", f"{post['text']}\n\n{errs}")
-        _queue_next_occurrence(post)
-        log.info("published post=%s ok=%s targets=%s", post["id"], all_ok, list(results))
+
+    _queue_next_occurrence(post)
+    log.info("published post=%s ok=%s targets=%s", post["id"], all_ok, list(results))
 
 async def _publish_due():
     if get_settings("default").get("paused"):
@@ -274,9 +275,10 @@ async def _worker():
     last_metrics = 0.0
     while True:
         try:
-            await _publish_due()
-        except Exception as e:
-            log.exception("worker tick failed")
+            await _refresh_all_metrics()
+            await _sample_followers()
+        except Exception:
+            log.exception("metrics refresh failed")
 
         now = time.monotonic()
         if now - last_metrics >= METRICS_REFRESH_SECONDS:
