@@ -31,11 +31,6 @@ export default function Settings() {
         </select>
         <p className="mt-2 text-xs text-muted">All scheduling times are interpreted in this zone.</p>
       </section>
-      <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm text-muted">
-        <input type="checkbox" checked={!!settings.evergreen_fill} className="accent-coral"
-          onChange={(e) => save({ evergreen_fill: e.target.checked })} />
-        Auto-fill empty slots from evergreen posts
-      </label>
 
       <section className="rounded-xl border border-line bg-surface p-5">
         <p className="mb-3 font-mono text-xs tracking-wider text-muted">POSTING SCHEDULE</p>
@@ -71,6 +66,17 @@ export default function Settings() {
             ))}
           </div>
         )}
+
+        <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm text-muted">
+          <input type="checkbox" checked={!!settings.evergreen_fill} className="mt-0.5 accent-coral"
+            onChange={(e) => { save({ evergreen_fill: e.target.checked }); toast(e.target.checked ? 'Auto-fill on' : 'Auto-fill off') }} />
+          <span>
+            Auto-fill empty slots from evergreen posts
+            <span className="mt-0.5 block text-xs text-muted/70">
+              Published posts marked with the recycle icon in the queue will be re-queued into any empty slot in the next 7 days.
+            </span>
+          </span>
+        </label>
       </section>
 
       <section className="rounded-xl border border-line bg-surface p-5">
@@ -87,11 +93,6 @@ export default function Settings() {
             : 'Posts publish at their scheduled time.'}
         </p>
       </section>
-      <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm text-muted">
-        <input type="checkbox" checked={!!settings.evergreen_fill} className="accent-coral"
-          onChange={(e) => save({ evergreen_fill: e.target.checked })} />
-        Auto-fill empty slots from evergreen posts
-      </label>
     </div>
   )
 }

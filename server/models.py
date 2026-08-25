@@ -34,7 +34,9 @@ class Post(BaseModel):
     link_mode: str = "off"          # off | utm | tracked
     utm_campaign: str = ""
     createdAt: int
-    poll: dict = {}
+    poll: dict = Field(default_factory=dict)
+    evergreen: bool = False
+    last_used: Optional[int] = None
 
 
 class PostPatch(BaseModel):
@@ -49,6 +51,9 @@ class PostPatch(BaseModel):
     thread: Optional[list[str]] = None
     variants: Optional[dict[str, str]] = None
     first_comment: Optional[str] = None
+    category: Optional[str] = None
     link_mode: Optional[str] = None
     utm_campaign: Optional[str] = None
-    poll: dict = {}
+    poll: Optional[dict] = None
+    evergreen: Optional[bool] = None
+    last_used: Optional[int] = None

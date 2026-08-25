@@ -26,12 +26,13 @@ from db import (
     add_follower_snapshot, follower_snapshots_since, create_link, get_link, add_click, click_counts, create_user, get_user_by_email, get_user, count_users,
     create_session, get_session, delete_session,list_users, delete_user, update_user_role, count_admins,
     add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media, get_settings, set_settings, list_hashtag_groups, add_hashtag_group, delete_hashtag_group,
-    evergreen_pool, list_workspaces, get_settings
+    evergreen_pool, list_templates, add_template, delete_template
 )
 from notify import send_email
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
 from authn import auth_enabled, hash_password, verify_password, new_token
+from logging_conf import log
 
 
 POLL_SECONDS = 3
@@ -151,30 +152,29 @@ def _slot_times(settings, now):
 async def _fill_evergreen():
     """Keep upcoming slots filled from the evergreen pool."""
     now = datetime.now(timezone.utc)
-    for wsr in list_workspaces():
-        ws = wsr["id"]
-        settings = get_settings(ws)
-        if settings.get("paused") or not settings.get("slots") or not settings.get("evergreen_fill"):
+    settings = {**DEFAULT_SETTINGS, **get_settings("default")}
+    if settings.get("paused") or not settings.get("slots") or not settings.get("evergreen_fill"):
+        return
+    pool = evergreen_pool()
+    if not pool:
+        return
+    scheduled = {_parse_iso(p["scheduledAt"]) for p in list_posts() if p["status"] == "scheduled"}
+    i = 0
+    for slot in _slot_times(settings, now)[:5]:      # fill up to 5 slots ahead
+        if slot in scheduled or i >= len(pool):
             continue
-        scheduled = {_parse_iso(p["scheduledAt"]) for p in list_posts(ws) if p["status"] == "scheduled"}
-        pool = evergreen_pool(ws)
-        if not pool:
-            continue
-        i = 0
-        for slot in _slot_times(settings, now)[:5]:      # fill up to 5 slots ahead
-            if slot in scheduled or i >= len(pool):
-                continue
-            src = pool[i]; i += 1
-            data = {k: v for k, v in src.items() if k not in ("results", "metrics", "workspace_id")}
-            data["id"] = f"post_{uuid.uuid4().hex[:12]}"
-            data["scheduledAt"] = slot.isoformat().replace("+00:00", "Z")
-            data["status"] = "scheduled"
-            data["evergreen"] = False          # the copy is a one-off
-            data["createdAt"] = int(time.time() * 1000)
-            upsert_post(Post(**data), ws)
-            patch_post(src["id"], {"last_used": int(time.time() * 1000)})
-            print(f"[evergreen] queued '{src['text'][:40]}' at {data['scheduledAt']}")
-
+        src = pool[i]; i += 1
+        data = {k: v for k, v in src.items() if k not in ("results", "metrics")}
+        data["id"] = f"post_{uuid.uuid4().hex[:12]}"
+        data["scheduledAt"] = slot.isoformat().replace("+00:00", "Z")
+        data["status"] = "scheduled"
+        data["evergreen"] = False          # the copy is a one-off
+        data["last_used"] = None
+        data["createdAt"] = int(time.time() * 1000)
+        upsert_post(Post(**data))
+        patch_post(src["id"], {"last_used": int(time.time() * 1000)})
+        log.info("evergreen queued '%s' at %s", src["text"][:40], data["scheduledAt"]) 
+        
 def _queue_next_occurrence(post: dict):
     """A repeating post spawns its successor; the published one stays as history."""
     repeat = post.get("repeat", "none")
@@ -189,7 +189,7 @@ def _queue_next_occurrence(post: dict):
     data["status"] = "scheduled"
     data["createdAt"] = int(time.time() * 1000)
     upsert_post(Post(**data))
-    print(f"[repeat] queued next {repeat} occurrence at {data['scheduledAt']}")
+    log.info("queued next %s occurrence at %s", repeat, data["scheduledAt"])
 
 async def _publish(post: dict):
     from oauth import refresh_if_needed
@@ -231,6 +231,7 @@ async def _publish(post: dict):
         add_notification("failed", "Post failed", f"{snippet} — {errs}", post["id"])
         send_email("A scheduled post failed", f"{post['text']}\n\n{errs}")
         _queue_next_occurrence(post)
+        log.info("published post=%s ok=%s targets=%s", post["id"], all_ok, list(results))
 
 async def _publish_due():
     if get_settings("default").get("paused"):
@@ -255,7 +256,7 @@ async def _refresh_all_metrics(since_days: int = 14):
                     metrics[platform_id] = m
                     add_snapshot(post["id"], platform_id, m, int(datetime.now(timezone.utc).timestamp() * 1000))
                 except Exception as e:
-                    print(f"[metrics] {post['id']} {platform_id}: {e}")
+                    log.warning("metrics fetch failed post=%s target=%s: %s", post["id"], platform_id, e)
         if metrics:
             patch_post(post["id"], {"metrics": metrics})
 
@@ -267,7 +268,7 @@ async def _sample_followers():
             if n is not None:
                 add_follower_snapshot(conn["id"], n, now)
         except Exception as e:
-            print(f"[followers] {conn['id']}: {e}")
+            log.warning("follower fetch failed conn=%s: %s", conn["id"], e)
 
 async def _worker():
     last_metrics = 0.0
@@ -275,7 +276,7 @@ async def _worker():
         try:
             await _publish_due()
         except Exception as e:
-            print(f"[worker] error: {e}")
+            log.exception("worker tick failed")
 
         now = time.monotonic()
         if now - last_metrics >= METRICS_REFRESH_SECONDS:
@@ -284,10 +285,9 @@ async def _worker():
                 await _refresh_all_metrics()
                 await _sample_followers()
             except Exception as e:
-                print(f"[worker] metrics error: {e}")
+                log.exception("metrics refresh failed")
 
         await asyncio.sleep(POLL_SECONDS)
-        await _fill_evergreen()
         
 
 
@@ -297,7 +297,7 @@ def _seed_from_env():
         creds = bluesky_credentials()
         if creds:
             set_connection("bluesky", creds[0], {"handle": creds[0], "app_password": creds[1]})
-            print(f"[seed] imported Bluesky creds from .env for {creds[0]}")
+            log.info("imported Bluesky creds from .env for %s", creds[0])
 
 
 @asynccontextmanager
@@ -306,13 +306,13 @@ async def lifespan(app: FastAPI):
     _seed_from_env()
     n = prune_sessions()
     if n:
-        print(f"[auth] pruned {n} expired sessions")    
+        log.info("pruned %d expired sessions", n)    
     from crypto import is_enabled
     if is_enabled():
         from db import list_connections, set_connection
         for conn in list_connections():                 # decrypts (or reads plaintext)…
             set_connection(conn["platform"], conn["handle"], conn["data"])   # …re-writes encrypted
-        print("[crypto] credentials encrypted at rest")
+        log.info("credentials encrypted at rest")
     task = asyncio.create_task(_worker())
     yield
     task.cancel()
@@ -456,15 +456,16 @@ def templates_delete(tid: str, request: Request) -> dict:
 
 @app.post("/posts/{post_id}/duplicate")
 def post_duplicate(post_id: str, request: Request) -> dict:
-    ws = _ws(request)
-    src = get_post(post_id, ws)
+    src = get_post(post_id)
     if not src:
         raise HTTPException(404, "Post not found")
-    data = {k: v for k, v in src.items() if k not in ("results", "metrics", "workspace_id")}
+    data = {k: v for k, v in src.items() if k not in ("results", "metrics")}
     data["id"] = f"post_{uuid.uuid4().hex[:12]}"
     data["status"] = "draft"
+    data["evergreen"] = False
+    data["last_used"] = None
     data["createdAt"] = int(time.time() * 1000)
-    return upsert_post(Post(**data), ws)
+    return upsert_post(Post(**data))
 
 # ---- metrics ----
 @app.post("/metrics/refresh")
@@ -882,7 +883,7 @@ async def inbox() -> list[dict]:
                 it["conn_id"] = conn["id"]; it["platform"] = conn["platform"]; it["account"] = conn["handle"]
             out.extend(items)
         except Exception as e:
-            print(f"[inbox] {conn['id']}: {e}")
+            log.warning("inbox fetch failed conn=%s: %s", conn["id"], e)
     out.sort(key=lambda x: x.get("created_at", 0), reverse=True)
     return out
 

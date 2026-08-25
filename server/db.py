@@ -49,9 +49,9 @@ def init_db():
                 link_mode    TEXT NOT NULL DEFAULT 'off',
                 utm_campaign TEXT NOT NULL DEFAULT '',
                 poll        TEXT NOT NULL DEFAULT '{}',
-                createdAt   INTEGER NOT NULL
+                createdAt   INTEGER NOT NULL,
                 evergreen   INTEGER NOT NULL DEFAULT 0,
-                last_used   INTEGER,
+                last_used   INTEGER
             )
         """)
         cols = {r["name"] for r in c.execute("PRAGMA table_info(posts)").fetchall()}
@@ -330,18 +330,19 @@ def upsert_post(post: Post) -> dict:
                 post.utm_campaign,
                 json.dumps(post.poll),
                 post.createdAt,
-                
+                1 if post.evergreen else 0,
+                post.last_used,                
             ),
         )
     return post.model_dump()
 
 
-def evergreen_pool(ws: str) -> list[dict]:
+def evergreen_pool() -> list[dict]:
     """Evergreen posts, least-recently-used first."""
     with _conn() as c:
         rows = c.execute(
-            """SELECT * FROM posts WHERE workspace_id = ? AND evergreen = 1 AND status = 'published'
-               ORDER BY COALESCE(last_used, 0) ASC""", (ws,)
+            """SELECT * FROM posts WHERE evergreen = 1 AND status = 'published'
+               ORDER BY COALESCE(last_used, 0) ASC"""
         ).fetchall()
     return [_row_to_post(r) for r in rows]
 
@@ -493,14 +494,14 @@ def add_snapshot(post_id, target, m, taken_at):
         )
 
 
-def snapshots_since(since_ms: int, ws: str) -> list[dict]:
+def snapshots_since(since_ms: int) -> list[dict]:
     with _conn() as c:
         rows = c.execute(
             """SELECT s.post_id, s.target, s.likes, s.reposts, s.replies,
                       s.impressions, s.reach, s.views, s.taken_at
                FROM metric_snapshots s JOIN posts p ON p.id = s.post_id
-               WHERE s.taken_at >= ? AND p.workspace_id = ? ORDER BY s.taken_at""",
-            (since_ms, ws),
+               WHERE s.taken_at >= ? ORDER BY s.taken_at""",
+            (since_ms,),
         ).fetchall()
     return [dict(r) for r in rows]
 

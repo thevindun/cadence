@@ -5,6 +5,7 @@ from .threads import ThreadsAdapter
 from db import get_connection, resolve_target
 from oauth import is_oauth, has_real_oauth
 from .linkedin import LinkedInAdapter
+from logging_conf import log
 
 PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "x", "linkedin"]
 
@@ -39,7 +40,7 @@ def _make_adapter(conn):
         try:
             return builder(conn["data"])
         except Exception as e:
-            print(f"[registry] failed to build real {platform}: {e}")
+            log.warning(f"[registry] failed to build real {platform}: {e}")
     return MockAdapter(platform)
 
 
