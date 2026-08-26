@@ -93,6 +93,7 @@ export default function App() {
     (async () => {
       try {
         const data = await (await fetch(`${API}/accounts`)).json()
+        if (!Array.isArray(data)) return
         const flat = []
         for (const p of data)
           for (const c of (p.connections || []))
@@ -206,7 +207,7 @@ export default function App() {
               <div className="grid gap-6 lg:grid-cols-[minmax(0,380px)_1fr]">
                 <Composer editing={editing} onSchedule={addPost} onSaveDraft={addPost}
                   onUpdate={handleUpdate} onCancelEdit={() => setEditingId(null)} />
-                <Queue posts={posts} onEdit={setEditingId} onDelete={deletePost} />
+                <Queue posts={posts} onEdit={setEditingId} onDelete={deletePost} onUpdate={updatePost} />
               </div>
             } />
             <Route path="/calendar" element={<Calendar posts={posts} onReschedule={updatePost} />} />

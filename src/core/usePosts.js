@@ -47,7 +47,8 @@ export function usePosts() {
   const refreshMetrics = useCallback(async () => {
     try {
       const res = await fetch(`${API}/metrics/refresh`, { method: 'POST' })
-      setPosts(await res.json())
+      const data = await res.json()
+      setPosts(Array.isArray(data) ? data : [])
     } catch (err) {
       console.error('Failed to refresh metrics:', err)
     }
@@ -60,6 +61,7 @@ export function usePosts() {
       try {
         const res = await fetch(`${API}/posts`)
         const server = await res.json()
+        if (!Array.isArray(server)) return
         if (cancelled) return
         setPosts((prev) => {
           // Server is source of truth; keep local-only posts still in flight.
