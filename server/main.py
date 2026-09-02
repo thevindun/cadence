@@ -235,7 +235,7 @@ async def _publish(post: dict):
     log.info("published post=%s ok=%s targets=%s", post["id"], all_ok, list(results))
 
 async def _publish_due():
-    if get_settings("default").get("paused"):
+    if get_settings("default").get("paused"):     # ← early return
         return
     now = datetime.now(timezone.utc)
     for post in list_posts():
@@ -273,25 +273,29 @@ async def _sample_followers():
 
 async def _worker():
     last_metrics = 0.0
+    log.info("worker started")
     while True:
         try:
-            await _refresh_all_metrics()
-            await _sample_followers()
+            now_dt = datetime.now(timezone.utc)
+            ready = [p for p in list_posts()
+                     if p["status"] == "scheduled" and _parse_iso(p["scheduledAt"]) <= now_dt]
+            if ready:
+                log.info("worker: %d post(s) ready to publish", len(ready))
+            await _publish_due()
         except Exception:
-            log.exception("metrics refresh failed")
+            log.exception("worker tick failed")
 
         now = time.monotonic()
         if now - last_metrics >= METRICS_REFRESH_SECONDS:
-            last_metrics = now                      # 0.0 start => also runs once right after boot
+            last_metrics = now
             try:
                 await _refresh_all_metrics()
                 await _sample_followers()
-            except Exception as e:
+                await _fill_evergreen()
+            except Exception:
                 log.exception("metrics refresh failed")
 
         await asyncio.sleep(POLL_SECONDS)
-        
-
 
 def _seed_from_env():
     # One-time: import .env Bluesky creds into the DB if nothing's stored yet.

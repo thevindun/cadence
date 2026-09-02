@@ -5,7 +5,7 @@ import httpx
 from .base import Adapter
 
 API = "https://api.linkedin.com"
-VERSION = "202506"   # LinkedIn-Version (YYYYMM) — bump within LinkedIn's supported window
+VERSION = "202608"   # LinkedIn-Version (YYYYMM) — bump within LinkedIn's supported window
 
 
 class LinkedInAdapter(Adapter):

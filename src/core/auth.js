@@ -13,8 +13,8 @@ function isApiUrl(url) {
   try {
     if (API) return url.startsWith(API)
     const u = new URL(url, window.location.origin)
-    return u.origin === window.location.origin &&
-      /^\/(posts|media|accounts|categories|metrics|links|auth)/.test(u.pathname)
+        return u.origin === window.location.origin &&
+      /^\/(posts|media|accounts|categories|metrics|links|auth|users|notifications|inbox|settings|ai|hashtags|templates)/.test(u.pathname)
   } catch { return false }
 }
 

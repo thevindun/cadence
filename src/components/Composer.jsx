@@ -55,7 +55,10 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const [poll, setPoll] = useState({ options: ['', ''], expires_in: 86400, multiple: false })
   const [groups, setGroups] = useState([])
   const loadGroups = async () => {
-    try { setGroups(await (await fetch(`${API}/hashtags`)).json()) } catch { }
+    try {
+      const data = await (await fetch(`${API}/hashtags`)).json()
+      setGroups(Array.isArray(data) ? data : [])
+    } catch { setGroups([]) }
   }
   useEffect(() => { loadGroups() }, [])
 
@@ -71,7 +74,10 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
 
   const [templates, setTemplates] = useState([])
   const loadTemplates = async () => {
-    try { setTemplates(await (await fetch(`${API}/templates`)).json()) } catch { }
+    try {
+      const data = await (await fetch(`${API}/templates`)).json()
+      setTemplates(Array.isArray(data) ? data : [])
+    } catch { setTemplates([]) }
   }
   useEffect(() => { loadTemplates() }, [])
 
@@ -104,6 +110,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
     (async () => {
       try {
         const data = await (await fetch(`${API}/accounts`)).json()
+        if (!Array.isArray(data)) return
         const flat = []
         for (const p of data)
           for (const c of (p.connections || []))
