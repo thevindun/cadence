@@ -36,6 +36,12 @@ _REAL = {
         "scopes": "pages_show_list,pages_manage_posts,pages_read_engagement,"
                   "pages_manage_engagement,pages_read_user_engagement,publish_video",
     },
+    "youtube": {
+        "authorize_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": "https://www.googleapis.com/auth/youtube.upload "
+                  "https://www.googleapis.com/auth/youtube.readonly",
+    },
 }
 
 OAUTH_PLATFORMS = set(_REAL.keys())
@@ -97,6 +103,10 @@ def build_authorize_url(platform: str, state: str) -> str:
         params.pop("scope", None)
         params["config_id"] = config_id
         params["override_default_response_type"] = "true"
+    if platform == "youtube":
+        # Google only issues a refresh token on first consent with these set.
+        params["access_type"] = "offline"
+        params["prompt"] = "consent"
     return f"{cfg['authorize_url']}?{urlencode(params)}"
 
 def _store_tokens(platform: str, tok: dict) -> str:
@@ -251,11 +261,14 @@ async def refresh_if_needed(conn_id: str) -> dict | None:
 
 def _token_fields(tok: dict) -> dict:
     expires_in = tok.get("expires_in")
-    return {
+    fields = {
         "access_token": tok.get("access_token"),
-        "refresh_token": tok.get("refresh_token", None),
         "expires_at": int((time.time() + expires_in) * 1000) if expires_in else None,
     }
+    # Providers omit refresh_token on refresh responses — never overwrite a good one.
+    if tok.get("refresh_token"):
+        fields["refresh_token"] = tok["refresh_token"]
+    return fields
 
 
 async def valid_access_token(conn_id: str) -> str | None:

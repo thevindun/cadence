@@ -8,8 +8,9 @@ from .linkedin import LinkedInAdapter
 from logging_conf import log
 from .instagram import InstagramAdapter
 from .facebook import FacebookAdapter
+from .youtube import YouTubeAdapter
 
-PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "linkedin", "facebook"]
+PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "linkedin", "facebook", "youtube"]
 
 
 def _build_bluesky(c):  return BlueskyAdapter(c["handle"], c["app_password"])
@@ -27,6 +28,7 @@ _OAUTH_BUILDERS = {
     "linkedin": lambda conn_id: LinkedInAdapter(conn_id),
     "instagram": lambda conn_id: InstagramAdapter(conn_id),
     "facebook": lambda conn_id: FacebookAdapter(conn_id),
+    "youtube": lambda conn_id: YouTubeAdapter(conn_id),
 }
 
 _cache = {}   # connection id -> adapter
