@@ -30,6 +30,12 @@ _REAL = {
         "scopes": "instagram_business_basic,instagram_business_content_publish,"
                   "instagram_business_manage_insights",
     },
+    "facebook": {
+        "authorize_url": f"https://www.facebook.com/{os.environ.get('FACEBOOK_API_VERSION', 'v25.0')}/dialog/oauth",
+        "token_url": f"https://graph.facebook.com/{os.environ.get('FACEBOOK_API_VERSION', 'v25.0')}/oauth/access_token",
+        "scopes": "pages_show_list,pages_manage_posts,pages_read_engagement,"
+                  "pages_manage_engagement,pages_read_user_engagement,publish_video",
+    },
 }
 
 OAUTH_PLATFORMS = set(_REAL.keys())
@@ -84,8 +90,14 @@ def build_authorize_url(platform: str, state: str) -> str:
         "client_id": cfg["client_id"], "redirect_uri": cfg["redirect_uri"],
         "scope": cfg["scopes"], "response_type": "code", "state": state,
     }
+    config_id = os.environ.get("FACEBOOK_CONFIG_ID")
+    if platform == "facebook" and config_id:
+        # Facebook Login for Business bundles permissions into a saved
+        # configuration; config_id replaces scope and the two can't coexist.
+        params.pop("scope", None)
+        params["config_id"] = config_id
+        params["override_default_response_type"] = "true"
     return f"{cfg['authorize_url']}?{urlencode(params)}"
-
 
 def _store_tokens(platform: str, tok: dict) -> str:
     expires_in = tok.get("expires_in")
@@ -131,9 +143,65 @@ async def _instagram_finish(client, cfg, tok: dict) -> dict:
 
     return {**long_tok, "handle": handle}
 
+FB_VERSION = os.environ.get("FACEBOOK_API_VERSION", "v25.0")
+FB_GRAPH = f"https://graph.facebook.com/{FB_VERSION}"
+
+
+async def _facebook_finish(client, cfg, tok: dict) -> str:
+    """FB gives a short user token. Trade it for a long-lived one, then fan out
+    one connection per Page — Page tokens derived this way never expire."""
+    short = tok.get("access_token")
+    if not short:
+        raise Exception("Facebook returned no access token")
+
+    r = await client.get(f"{FB_GRAPH}/oauth/access_token", params={
+        "grant_type": "fb_exchange_token",
+        "client_id": cfg["client_id"],
+        "client_secret": cfg["client_secret"],
+        "fb_exchange_token": short,
+    })
+    r.raise_for_status()
+    long_user = r.json()["access_token"]
+
+    r = await client.get(f"{FB_GRAPH}/me/accounts", params={
+        "fields": "id,name,access_token,tasks",
+        "access_token": long_user,
+    })
+    r.raise_for_status()
+    pages = r.json().get("data", [])
+    if not pages:
+        raise Exception("No Facebook Pages found — you must be an admin of at least one Page")
+    first: str | None = None
+    for p in pages:
+        handle = (p.get("name") or p["id"]).replace(":", "-")   # ':' breaks conn ids
+        cid = set_connection("facebook", handle, {
+            "access_token": p["access_token"],
+            "page_id": p["id"],
+            "handle": handle,
+            "refresh_token": None,
+            "expires_at": None,                                  # page tokens don't expire
+            "scope": cfg["scopes"],
+        })
+        first = first or cid
+
+    if first is None:
+        raise Exception("Facebook returned Pages but none could be stored")
+    return first
+
 async def exchange_code(platform: str, code: str) -> str:
     cfg = _config(platform)
     async with httpx.AsyncClient(timeout=30) as client:
+
+        if platform == "facebook" and has_real_oauth("facebook"):
+            r = await client.get(cfg["token_url"], params={
+                "client_id": cfg["client_id"],
+                "client_secret": cfg["client_secret"],
+                "redirect_uri": cfg["redirect_uri"],
+                "code": code,
+            })
+            r.raise_for_status()
+            return await _facebook_finish(client, cfg, r.json())
+
         r = await client.post(cfg["token_url"], data={
             "grant_type": "authorization_code", "code": code,
             "client_id": cfg["client_id"], "client_secret": cfg["client_secret"],
@@ -144,7 +212,8 @@ async def exchange_code(platform: str, code: str) -> str:
         if platform == "instagram" and has_real_oauth("instagram"):
             tok = await _instagram_finish(client, cfg, tok)
         return _store_tokens(platform, tok)
-    
+
+
 async def refresh_if_needed(conn_id: str) -> dict | None:
     conn = get_connection(conn_id)
     if not conn:

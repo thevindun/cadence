@@ -7,8 +7,9 @@ from oauth import is_oauth, has_real_oauth
 from .linkedin import LinkedInAdapter
 from logging_conf import log
 from .instagram import InstagramAdapter
+from .facebook import FacebookAdapter
 
-PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "linkedin"]
+PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "linkedin", "facebook"]
 
 
 def _build_bluesky(c):  return BlueskyAdapter(c["handle"], c["app_password"])
@@ -25,6 +26,7 @@ _OAUTH_BUILDERS = {
     "threads": lambda conn_id: ThreadsAdapter(conn_id),
     "linkedin": lambda conn_id: LinkedInAdapter(conn_id),
     "instagram": lambda conn_id: InstagramAdapter(conn_id),
+    "facebook": lambda conn_id: FacebookAdapter(conn_id),
 }
 
 _cache = {}   # connection id -> adapter

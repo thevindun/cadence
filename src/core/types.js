@@ -15,6 +15,7 @@ export const PLATFORMS = {
   mastodon:  { id: 'mastodon',  label: 'Mastodon',  short: 'MA', maxLen: 500 },
   threads:   { id: 'threads',   label: 'Threads',   short: 'TH', maxLen: 500 },
   instagram: { id: 'instagram', label: 'Instagram', short: 'IG', maxLen: 2200 },
+  facebook:  { id: 'facebook',  label: 'Facebook',  short: 'FB', maxLen: 63206 },
   x:         { id: 'x',         label: 'X',         short: 'X',  maxLen: 280 },
   linkedin:  { id: 'linkedin',  label: 'LinkedIn',  short: 'LI', maxLen: 3000 },
 }
