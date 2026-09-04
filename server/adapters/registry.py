@@ -8,7 +8,7 @@ from .linkedin import LinkedInAdapter
 from logging_conf import log
 from .instagram import InstagramAdapter
 
-PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "x", "linkedin"]
+PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "linkedin"]
 
 
 def _build_bluesky(c):  return BlueskyAdapter(c["handle"], c["app_password"])
