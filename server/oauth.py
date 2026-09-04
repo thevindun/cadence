@@ -17,12 +17,18 @@ _REAL = {
     "threads": {
         "authorize_url": "https://threads.net/oauth/authorize",
         "token_url": "https://graph.threads.net/oauth/access_token",
-        "scopes": "threads_basic,threads_content_publish",
+        "scopes": "threads_basic,threads_content_publish,threads_manage_insights",
     },
     "linkedin": {
         "authorize_url": "https://www.linkedin.com/oauth/v2/authorization",
         "token_url": "https://www.linkedin.com/oauth/v2/accessToken",
         "scopes": "openid profile w_member_social",
+    },
+     "instagram": {
+        "authorize_url": "https://www.instagram.com/oauth/authorize",
+        "token_url": "https://api.instagram.com/oauth/access_token",
+        "scopes": "instagram_business_basic,instagram_business_content_publish,"
+                  "instagram_business_manage_insights",
     },
 }
 
@@ -93,6 +99,38 @@ def _store_tokens(platform: str, tok: dict) -> str:
     }
     return set_connection(platform, handle, data)         # returns connection id
 
+
+IG_GRAPH = "https://graph.instagram.com"
+
+
+async def _instagram_finish(client, cfg, tok: dict) -> dict:
+    """IG returns a 1-hour token with no expires_in. Trade it for a 60-day one
+    and resolve the username, so the connection doesn't die in an hour."""
+    short = tok.get("access_token")
+    if not short:
+        raise Exception("Instagram returned no access token")
+
+    r = await client.get(f"{IG_GRAPH}/access_token", params={
+        "grant_type": "ig_exchange_token",
+        "client_secret": cfg["client_secret"],
+        "access_token": short,
+    })
+    r.raise_for_status()
+    long_tok = r.json()
+
+    handle = f"instagram account"
+    try:
+        me = await client.get(f"{IG_GRAPH}/me", params={
+            "fields": "user_id,username",
+            "access_token": long_tok["access_token"],
+        })
+        me.raise_for_status()
+        handle = "@" + me.json().get("username", "instagram")
+    except Exception:
+        pass                                  # non-fatal; handle stays generic
+
+    return {**long_tok, "handle": handle}
+
 async def exchange_code(platform: str, code: str) -> str:
     cfg = _config(platform)
     async with httpx.AsyncClient(timeout=30) as client:
@@ -102,9 +140,11 @@ async def exchange_code(platform: str, code: str) -> str:
             "redirect_uri": cfg["redirect_uri"],
         })
         r.raise_for_status()
-        return _store_tokens(platform, r.json())
-
-
+        tok = r.json()
+        if platform == "instagram" and has_real_oauth("instagram"):
+            tok = await _instagram_finish(client, cfg, tok)
+        return _store_tokens(platform, tok)
+    
 async def refresh_if_needed(conn_id: str) -> dict | None:
     conn = get_connection(conn_id)
     if not conn:
@@ -113,10 +153,23 @@ async def refresh_if_needed(conn_id: str) -> dict | None:
     exp = creds.get("expires_at")
     if not exp or exp - int(time.time() * 1000) > 60_000:
         return conn
+    cfg = _config(conn["platform"])
+
+    if conn["platform"] == "instagram":
+        # IG refreshes using the access token itself — no refresh_token exists.
+        async with httpx.AsyncClient(timeout=30) as client:
+            r = await client.get(f"{IG_GRAPH}/refresh_access_token", params={
+                "grant_type": "ig_refresh_token",
+                "access_token": creds.get("access_token"),
+            })
+            r.raise_for_status()
+            set_connection("instagram", creds["handle"],
+                           {**creds, **_token_fields(r.json())})
+        return get_connection(conn_id)
+
     refresh = creds.get("refresh_token")
     if not refresh:
         return conn
-    cfg = _config(conn["platform"])
     async with httpx.AsyncClient(timeout=30) as client:
         r = await client.post(cfg["token_url"], data={
             "grant_type": "refresh_token", "refresh_token": refresh,

@@ -6,6 +6,7 @@ from db import get_connection, resolve_target
 from oauth import is_oauth, has_real_oauth
 from .linkedin import LinkedInAdapter
 from logging_conf import log
+from .instagram import InstagramAdapter
 
 PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "x", "linkedin"]
 
@@ -23,6 +24,7 @@ _BUILDERS = {
 _OAUTH_BUILDERS = {
     "threads": lambda conn_id: ThreadsAdapter(conn_id),
     "linkedin": lambda conn_id: LinkedInAdapter(conn_id),
+    "instagram": lambda conn_id: InstagramAdapter(conn_id),
 }
 
 _cache = {}   # connection id -> adapter
