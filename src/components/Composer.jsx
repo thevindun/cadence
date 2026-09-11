@@ -13,13 +13,14 @@ import { useToast } from '../core/useToast.jsx'
 import { useHotkeys } from '../core/useHotkeys.js'
 import EmojiPicker from './EmojiPicker.jsx'
 import { Smile } from 'lucide-react'
-import { localInputToISO, isoToLocalInput } from '../core/tz.js'
 import { useSettings } from '../core/useSettings.js'
 import { nextOpenSlot } from '../core/slots.js'
 import { Zap } from 'lucide-react'
 import AiAssist from './AiAssist.jsx'
 import { Sparkles } from 'lucide-react'
 import { Hash, BarChart3, FileStack } from 'lucide-react'
+import { localInputToISO, isoToLocalInput, roundUp, fmtWhen, relTime } from '../core/tz.js'
+
 const platMax = (p) => PLATFORMS[p]?.maxLen ?? 500
 
 export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, onCancelEdit }) {
@@ -47,7 +48,15 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const toast = useToast()
   const { settings } = useSettings()
   const tz = settings?.timezone || 'UTC'
-  const [when, setWhen] = useState(isoToLocalInput(new Date().toISOString(), tz))
+  const [when, setWhen] = useState('')
+  const whenTouched = useRef(false)
+
+  // tz arrives async — reseed `when` once it's real, unless the user set it themselves.
+  useEffect(() => {
+    if (editing || whenTouched.current) return
+    setWhen(isoToLocalInput(new Date().toISOString(), tz))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tz, editing?.id])
   const [fcOpen, setFcOpen] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
   const taRef = useRef(null)
@@ -177,6 +186,7 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
   const setSeg = (i, v) => setThread((t) => t.map((s, idx) => (idx === i ? v : s)))
   const delSeg = (i) => setThread((t) => t.filter((_, idx) => idx !== i))
   const reset = () => {
+    whenTouched.current = false
     setCategory(null)
     setText(''); setVariants({}); setThread([]); setSelected({}); setWhen(isoToLocalInput(new Date().toISOString(), tz))
     setRepeat(REPEAT.NONE); setMedia([]); setActiveTab('all')
@@ -256,6 +266,20 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
     }
   })
 
+    const plusHours = (h) =>
+    isoToLocalInput(roundUp(new Date(Date.now() + h * 3600e3), 15).toISOString(), tz)
+
+  const atWallClock = (dayOffset, hh, mm = 0) => {
+    const [datePart] = (when || isoToLocalInput(new Date().toISOString(), tz)).split('T')
+    const d = new Date(`${datePart}T00:00:00`)
+    d.setDate(d.getDate() + dayOffset)
+    const p = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(hh)}:${p(mm)}`
+  }
+
+  const pick = (v) => { whenTouched.current = true; setWhen(v) }
+  const whenISO = when ? localInputToISO(when, tz) : null
+  const inPast = whenISO ? new Date(whenISO) < new Date() : false
 
   return (
     <section className="rounded-xl border border-line bg-surface p-5">
@@ -508,9 +532,28 @@ export default function Composer({ editing, onSchedule, onSaveDraft, onUpdate, o
 
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)}
+                <input type="datetime-local" value={when} onChange={(e) => pick(e.target.value)}
           className="rounded-lg border border-line bg-elevated px-3 py-2 font-mono text-xs text-fg outline-none transition focus:border-coral [color-scheme:dark]" />
-        <span className="font-mono text-[10px] text-muted">{tz}</span>
+
+        <div className="flex flex-wrap items-center gap-1">
+          {[
+            ['+1h', () => plusHours(1)],
+            ['+3h', () => plusHours(3)],
+            ['Tonight', () => atWallClock(0, 19)],
+            ['Tomorrow', () => atWallClock(1, 9)],
+          ].map(([label, fn]) => (
+            <button key={label} onClick={() => pick(fn())}
+              className="rounded-md border border-line px-2 py-1 font-mono text-[11px] text-muted transition hover:border-coral/40 hover:text-coral">
+              {label}
+            </button>
+          ))}
+        </div>
+              {whenISO && (
+        <p className={`mt-2 font-mono text-[11px] ${inPast ? 'text-red-400' : 'text-muted'}`}>
+          {fmtWhen(whenISO, tz)} · {relTime(whenISO)} · {tz}
+          {inPast && ' — this will publish immediately'}
+        </p>
+      )}
         {(settings?.slots?.length > 0) && (
           <button onClick={() => {
             const iso = nextOpenSlot(settings.slots, tz, [])

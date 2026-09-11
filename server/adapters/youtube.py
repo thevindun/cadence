@@ -41,7 +41,7 @@ class YouTubeAdapter(Adapter):
             raise Exception("YouTube account not connected")
         return tok
 
-    def _video_path(self, media_ids: list):
+    def _video_path(self, media_ids: list) -> tuple:
         from db import MEDIA_DIR, get_media
         for mid in media_ids:
             meta = get_media(mid)
@@ -58,9 +58,8 @@ class YouTubeAdapter(Adapter):
             text = post.get("text") or ""
             path, ctype = self._video_path(post.get("media") or [])
 
-            if path is None:
+            if path is None or ctype is None:
                 return {"ok": False, "error": "YouTube requires a video file"}
-
             title, description = _split_title(text)
             size = path.stat().st_size
 
