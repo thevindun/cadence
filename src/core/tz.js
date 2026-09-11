@@ -42,3 +42,31 @@ export function isoToLocalInput(iso, tz) {
 
 export const fmtInTz = (iso, tz, opts) =>
   new Date(iso).toLocaleString(undefined, { timeZone: tz, ...opts })
+
+/** Round a Date up to the next `step` minutes. */
+export function roundUp(date, step = 15) {
+  const d = new Date(date)
+  d.setSeconds(0, 0)
+  d.setMinutes(d.getMinutes() + ((step - (d.getMinutes() % step)) % step))
+  return d
+}
+
+/** "Sat, Sep 12 · 9:00 AM" */
+export function fmtWhen(iso, tz) {
+  return new Date(iso).toLocaleString(undefined, {
+    timeZone: tz, weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
+/** "in 45 min" / "in 3 hours" / "in 2 days" / "in the past" */
+export function relTime(iso) {
+  const diff = new Date(iso) - Date.now()
+  if (diff < 0) return 'in the past'
+  const mins = Math.round(diff / 60000)
+  if (mins < 60) return `in ${mins} min`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `in ${hrs} hour${hrs === 1 ? '' : 's'}`
+  const days = Math.round(hrs / 24)
+  return `in ${days} day${days === 1 ? '' : 's'}`
+}
