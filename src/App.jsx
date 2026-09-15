@@ -132,7 +132,8 @@ export default function App() {
       </div>
     )
   if (auth.state === 'login')
-    return <Login needsSetup={auth.needsSetup} onAuthed={(user) => setAuth({ state: 'ready', user })} />
+    return <Login needsSetup={auth.needsSetup} demo={auth.demo}
+      onAuthed={(user) => setAuth({ state: 'ready', user })} />
   return (
     <div className="flex h-screen overflow-hidden bg-ink font-display text-fg">
       {navOpen && (

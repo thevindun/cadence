@@ -404,7 +404,7 @@ def get_posts() -> list[dict]:
 def create_post(post: Post, request: Request) -> dict:
     if is_demo() and len(list_posts()) >= MAX_POSTS:
         raise HTTPException(429, "The demo is full — delete a post or self-host Cadence")
-    if _is_member(request) and post.status == "scheduled":
+    if _is_member(request) and post.status == "scheduled" and not is_demo():
         post.status = "pending"
         snippet = (post.text[:60] + "…") if len(post.text) > 60 else post.text
         add_notification("pending", "Post awaiting review", snippet, post.id, audience="admin")
@@ -420,7 +420,7 @@ def followers_history(days: int = 30) -> dict:
 @app.patch("/posts/{post_id}")
 def update_post(post_id: str, patch: PostPatch, request: Request) -> dict:
     changes = patch.model_dump(exclude_unset=True)
-    if _is_member(request) and changes.get("status") == "scheduled":
+    if _is_member(request) and changes.get("status") == "scheduled" and not is_demo():
         changes["status"] = "pending"
     existing = get_post(post_id)
     if existing is None:
@@ -784,18 +784,26 @@ def health() -> dict:
 def auth_status() -> dict:
     return {"enabled": auth_enabled(), "has_users": count_users() > 0, "demo": is_demo()}
 
+
 @app.post("/auth/register")
 def auth_register(body: dict) -> dict:
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
     if "@" not in email or len(password) < 8:
         raise HTTPException(422, "Valid email and 8+ char password required")
-    if count_users() > 0:                          # bootstrap only; admin-added users come later
-        raise HTTPException(403, "Registration is closed — ask an admin to add you")
-    salt, pw = hash_password(password)
-    uid = create_user(email, salt, pw, "admin")
-    return {"id": uid, "email": email, "role": "admin"}
 
+    first = count_users() == 0
+    if not first and not is_demo():
+        raise HTTPException(403, "Registration is closed — ask an admin to add you")
+    if not first and count_users() >= MAX_DEMO_USERS:
+        raise HTTPException(429, "The demo is full — self-host Cadence to keep exploring")
+    if get_user_by_email(email):
+        raise HTTPException(409, "That email is already registered")
+
+    role = "admin" if first else "member"
+    salt, pw = hash_password(password)
+    uid = create_user(email, salt, pw, role)
+    return {"id": uid, "email": email, "role": role}
 
 @app.post("/auth/login")
 def auth_login(body: dict) -> dict:
