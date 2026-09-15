@@ -192,7 +192,7 @@ export default function App() {
         {auth.demo && (
           <div className="border-b border-coral/30 bg-coral/10 px-4 py-2 text-center font-mono text-[11px] text-coral">
             DEMO MODE — posts publish to a mock provider, not real platforms.
-            <a href="https://github.com/YOUR-ORG/cadence" target="_blank" rel="noreferrer"
+            <a href="https://github.com/thevindun/cadence" target="_blank" rel="noreferrer"
               className="ml-2 underline transition hover:text-fg">
               Self-host to connect real accounts
             </a>
