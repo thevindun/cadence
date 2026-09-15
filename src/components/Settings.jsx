@@ -3,6 +3,8 @@ import { Clock, Plus, X, Pause, Play } from 'lucide-react'
 import { useSettings } from '../core/useSettings.js'
 import { TIMEZONES } from '../core/tz.js'
 import { useToast } from '../core/useToast.jsx'
+import { API } from '../core/api.js'
+import { logout } from '../core/auth.js'
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -93,6 +95,8 @@ export default function Settings() {
             : 'Posts publish at their scheduled time.'}
         </p>
       </section>
+      <AccountSection />
+
     </div>
   )
 }
