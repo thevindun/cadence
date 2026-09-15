@@ -79,11 +79,14 @@ export default function App() {
     ; (async () => {
       await waitForServer()
       const status = await authStatus()
-      if (!status.enabled) { setAuth({ state: 'ready', user: null }); return }
-      if (!status.has_users) { setAuth({ state: 'login', needsSetup: true }); return }
-      if (!getToken()) { setAuth({ state: 'login', needsSetup: false }); return }
+      const demo = Boolean(status.demo)
+      if (!status.enabled) { setAuth({ state: 'ready', user: null, demo }); return }
+      if (!status.has_users) { setAuth({ state: 'login', needsSetup: true, demo }); return }
+      if (!getToken()) { setAuth({ state: 'login', needsSetup: false, demo }); return }
       const res = await fetch(`${API}/auth/me`)
-      setAuth(res.ok ? { state: 'ready', user: await res.json() } : { state: 'login', needsSetup: false })
+      setAuth(res.ok
+        ? { state: 'ready', user: await res.json(), demo }
+        : { state: 'login', needsSetup: false, demo })
     })()
   }, [])
 
@@ -186,6 +189,15 @@ export default function App() {
       </aside>
 
       <div className="flex flex-1 flex-col">
+        {auth.demo && (
+          <div className="border-b border-coral/30 bg-coral/10 px-4 py-2 text-center font-mono text-[11px] text-coral">
+            DEMO MODE — posts publish to a mock provider, not real platforms.
+            <a href="https://github.com/YOUR-ORG/cadence" target="_blank" rel="noreferrer"
+              className="ml-2 underline transition hover:text-fg">
+              Self-host to connect real accounts
+            </a>
+          </div>
+        )}
         <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-4 md:px-8">
           <button onClick={() => setNavOpen(true)}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-muted md:hidden">
@@ -238,9 +250,6 @@ export default function App() {
               ['A', 'Accounts'], ['⌘/Ctrl + Enter', 'Schedule post'], ['?', 'This help']].map(([k, v]) => (
                 <li key={k} className="flex items-center justify-between">
                   <span className="text-muted">{v}</span>
-                  <NavLink to={`/posts/${post.id}`} className="min-w-0 flex-1 truncate text-sm text-fg transition hover:text-coral">
-                    {post.text}
-                  </NavLink>
                   <kbd className="rounded border border-line bg-elevated px-1.5 py-0.5 font-mono text-[11px] text-fg">{k}</kbd>
                 </li>
               ))}
