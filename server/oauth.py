@@ -42,6 +42,11 @@ _REAL = {
         "scopes": "https://www.googleapis.com/auth/youtube.upload "
                   "https://www.googleapis.com/auth/youtube.readonly",
     },
+    "tiktok": {
+        "authorize_url": "https://www.tiktok.com/v2/auth/authorize/",
+        "token_url": "https://open.tiktokapis.com/v2/oauth/token/",
+        "scopes": "user.info.basic,video.upload",
+    },
 }
 
 OAUTH_PLATFORMS = set(_REAL.keys())
@@ -107,6 +112,10 @@ def build_authorize_url(platform: str, state: str) -> str:
         # Google only issues a refresh token on first consent with these set.
         params["access_type"] = "offline"
         params["prompt"] = "consent"
+    if platform == "tiktok":
+        # TikTok names the parameter client_key, not client_id.
+        params.pop("client_id", None)
+        params["client_key"] = cfg["client_id"]
     return f"{cfg['authorize_url']}?{urlencode(params)}"
 
 def _store_tokens(platform: str, tok: dict) -> str:
@@ -198,6 +207,38 @@ async def _facebook_finish(client, cfg, tok: dict) -> str:
         raise Exception("Facebook returned Pages but none could be stored")
     return first
 
+TIKTOK_API = "https://open.tiktokapis.com/v2"
+
+
+async def _tiktok_token(client, cfg, data: dict) -> dict:
+    """TikTok's OAuth uses client_key and form encoding for both grants."""
+    r = await client.post(
+        cfg["token_url"],
+        data={**data, "client_key": cfg["client_id"],
+              "client_secret": cfg["client_secret"]},
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    r.raise_for_status()
+    tok = r.json()
+    if tok.get("error"):
+        raise Exception(tok.get("error_description") or tok["error"])
+    return tok
+
+
+async def _tiktok_finish(client, cfg, tok: dict) -> dict:
+    """Resolve the display name so the connection isn't labelled generically."""
+    handle = "tiktok account"
+    try:
+        me = await client.get(f"{TIKTOK_API}/user/info/",
+                              params={"fields": "open_id,display_name"},
+                              headers={"Authorization": f"Bearer {tok['access_token']}"})
+        me.raise_for_status()
+        user = (me.json().get("data") or {}).get("user") or {}
+        if user.get("display_name"):
+            handle = "@" + user["display_name"]
+    except Exception:
+        pass
+    return {**tok, "handle": handle}
 async def exchange_code(platform: str, code: str) -> str:
     cfg = _config(platform)
     async with httpx.AsyncClient(timeout=30) as client:
@@ -212,6 +253,12 @@ async def exchange_code(platform: str, code: str) -> str:
             r.raise_for_status()
             return await _facebook_finish(client, cfg, r.json())
 
+        if platform == "tiktok" and has_real_oauth("tiktok"):
+            tok = await _tiktok_token(client, cfg, {
+                "grant_type": "authorization_code", "code": code,
+                "redirect_uri": cfg["redirect_uri"],
+            })
+            return _store_tokens(platform, await _tiktok_finish(client, cfg, tok))
         r = await client.post(cfg["token_url"], data={
             "grant_type": "authorization_code", "code": code,
             "client_id": cfg["client_id"], "client_secret": cfg["client_secret"],
@@ -246,6 +293,15 @@ async def refresh_if_needed(conn_id: str) -> dict | None:
                            {**creds, **_token_fields(r.json())})
         return get_connection(conn_id)
 
+    if conn["platform"] == "tiktok":
+        async with httpx.AsyncClient(timeout=30) as client:
+            tok = await _tiktok_token(client, cfg, {
+                "grant_type": "refresh_token",
+                "refresh_token": creds.get("refresh_token"),
+            })
+            set_connection("tiktok", creds["handle"], {**creds, **_token_fields(tok)})
+        return get_connection(conn_id)
+    
     refresh = creds.get("refresh_token")
     if not refresh:
         return conn

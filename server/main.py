@@ -19,6 +19,7 @@ from config import bluesky_credentials
 from adapters.registry import (
     get_adapter, invalidate, is_supported, make_real_adapter, PLATFORM_IDS,
 )
+from demo import is_demo, block, MAX_MEDIA_BYTES, MAX_POSTS
 from db import (
     init_db, list_posts, upsert_post, patch_post, get_post, delete_post,
     list_connections, get_connection, set_connection, delete_connection, resolve_target,
@@ -401,6 +402,8 @@ def get_posts() -> list[dict]:
 
 @app.post("/posts")
 def create_post(post: Post, request: Request) -> dict:
+    if is_demo() and len(list_posts()) >= MAX_POSTS:
+        raise HTTPException(429, "The demo is full — delete a post or self-host Cadence")
     if _is_member(request) and post.status == "scheduled":
         post.status = "pending"
         snippet = (post.text[:60] + "…") if len(post.text) > 60 else post.text
@@ -530,6 +533,8 @@ def settings_put(body: dict, request: Request) -> dict:
 async def upload_media(file: UploadFile = File(...)) -> dict:
     media_id = f"media_{uuid.uuid4().hex}"
     data = await file.read()
+    if is_demo() and len(data) > MAX_MEDIA_BYTES:
+        raise HTTPException(413, f"Demo uploads are capped at {MAX_MEDIA_BYTES // (1024*1024)}MB")
     (MEDIA_DIR / media_id).write_bytes(data)
     add_media(media_id, file.content_type or "application/octet-stream",
               file.filename or media_id, len(data))
@@ -623,6 +628,7 @@ def get_accounts() -> list[dict]:
 @app.post("/accounts/{platform}")
 async def connect_account(platform: str, creds: dict, request: Request) -> dict:
     _require_admin(request)
+    block("Connecting real accounts")
     if platform not in PLATFORM_IDS:
         raise HTTPException(404, "Unknown platform")
     if not is_supported(platform):
@@ -657,6 +663,7 @@ def disconnect_account(platform: str, handle: str, request: Request) -> dict:
 
 @app.get("/accounts/{platform}/oauth/start")
 def oauth_start(platform: str):
+    block("Connecting real accounts")
     if not is_oauth(platform):
         raise HTTPException(400, f"{platform} does not use OAuth")
     return RedirectResponse(build_authorize_url(platform, new_state(platform)))
@@ -775,8 +782,7 @@ def health() -> dict:
 
 @app.get("/auth/status")
 def auth_status() -> dict:
-    return {"enabled": auth_enabled(), "has_users": count_users() > 0}
-
+    return {"enabled": auth_enabled(), "has_users": count_users() > 0, "demo": is_demo()}
 
 @app.post("/auth/register")
 def auth_register(body: dict) -> dict:

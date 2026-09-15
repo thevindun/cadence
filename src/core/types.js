@@ -19,6 +19,7 @@ export const PLATFORMS = {
   x:         { id: 'x',         label: 'X',         short: 'X',  maxLen: 280 },
   linkedin:  { id: 'linkedin',  label: 'LinkedIn',  short: 'LI', maxLen: 3000 },
   youtube:   { id: 'youtube',   label: 'YouTube',   short: 'YT', maxLen: 5000 },
+  tiktok:    { id: 'tiktok',    label: 'TikTok',    short: 'TT', maxLen: 2200 },
 }
 
 let counter = 0

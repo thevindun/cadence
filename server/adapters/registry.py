@@ -9,8 +9,9 @@ from logging_conf import log
 from .instagram import InstagramAdapter
 from .facebook import FacebookAdapter
 from .youtube import YouTubeAdapter
+from .tiktok import TikTokAdapter
 
-PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "linkedin", "facebook", "youtube"]
+PLATFORM_IDS = ["bluesky", "mastodon", "threads", "instagram", "linkedin", "facebook", "youtube", "tiktok"]
 
 
 def _build_bluesky(c):  return BlueskyAdapter(c["handle"], c["app_password"])
@@ -29,6 +30,7 @@ _OAUTH_BUILDERS = {
     "instagram": lambda conn_id: InstagramAdapter(conn_id),
     "facebook": lambda conn_id: FacebookAdapter(conn_id),
     "youtube": lambda conn_id: YouTubeAdapter(conn_id),
+    "tiktok": lambda conn_id: TikTokAdapter(conn_id),
 }
 
 _cache = {}   # connection id -> adapter
@@ -36,11 +38,16 @@ _cache = {}   # connection id -> adapter
 
 def _make_adapter(conn):
     platform = conn["platform"]
+
+    from demo import is_demo
+    if is_demo():
+        return MockAdapter(platform)      # demo never touches a real platform
+
     if is_oauth(platform):
         builder = _OAUTH_BUILDERS.get(platform)
-        if builder and has_real_oauth(platform):      # real app configured
+        if builder and has_real_oauth(platform):
             return builder(conn["id"])
-        return MockAdapter(platform)                   # mock-connected until then
+        return MockAdapter(platform)
     builder = _BUILDERS.get(platform)
     if builder and conn["data"]:
         try:
@@ -48,7 +55,6 @@ def _make_adapter(conn):
         except Exception as e:
             log.warning(f"[registry] failed to build real {platform}: {e}")
     return MockAdapter(platform)
-
 
 def get_adapter(target: str):
     conn = resolve_target(target)
