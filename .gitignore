@@ -1,32 +1,60 @@
-# Logs
-logs
+# ── Secrets ──────────────────────────────────────────────────
+# Never commit real credentials. .env.example is the template.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ── Database and user data ───────────────────────────────────
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+cadence.db*
+server/media/
+media/
+data/
+
+# ── Python ───────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Node / Vite ──────────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# ── PyInstaller / Tauri build artifacts ──────────────────────
+build/
+server/build/
+*.spec
+src-tauri/target/
+src-tauri/gen/
+src-tauri/binaries/
+
+# ── Editors and OS ───────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── Logs ─────────────────────────────────────────────────────
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-
-server/.venv/
-server/__pycache__/
-server/cadence.db
-server/.env
-
-server/media/
