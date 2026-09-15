@@ -19,7 +19,7 @@ from config import bluesky_credentials
 from adapters.registry import (
     get_adapter, invalidate, is_supported, make_real_adapter, PLATFORM_IDS,
 )
-from demo import is_demo, block, MAX_MEDIA_BYTES, MAX_POSTS
+from demo import is_demo, block, MAX_MEDIA_BYTES, MAX_POSTS, MAX_DEMO_USERS
 from db import (
     init_db, list_posts, upsert_post, patch_post, get_post, delete_post,
     list_connections, get_connection, set_connection, delete_connection, resolve_target,
