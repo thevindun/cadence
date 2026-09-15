@@ -27,7 +27,7 @@ from db import (
     add_follower_snapshot, follower_snapshots_since, create_link, get_link, add_click, click_counts, create_user, get_user_by_email, get_user, count_users,
     create_session, get_session, delete_session,list_users, delete_user, update_user_role, count_admins,
     add_notification, list_notifications, unread_count, mark_all_read, upsert_post, prune_sessions, read_media, get_settings, set_settings, list_hashtag_groups, add_hashtag_group, delete_hashtag_group,
-    evergreen_pool, list_templates, add_template, delete_template
+    evergreen_pool, list_templates, add_template, delete_template,update_user_password, delete_sessions_for_user,
 )
 from notify import send_email
 from pathlib import Path
@@ -819,6 +819,50 @@ def auth_logout(request: Request) -> dict:
 def auth_me(request: Request) -> dict:
     u = request.state.user
     return {"id": u["id"], "email": u["email"], "role": u["role"]}
+
+@app.patch("/auth/password")
+def auth_change_password(body: dict, request: Request) -> dict:
+    """Change your own password. Requires the current one."""
+    user = request.state.user
+    current = body.get("current_password") or ""
+    new = body.get("new_password") or ""
+
+    if len(new) < 8:
+        raise HTTPException(422, "New password must be at least 8 characters")
+    if not verify_password(current, user["salt"], user["password_hash"]):
+        raise HTTPException(401, "Current password is incorrect")
+
+    salt, pw = hash_password(new)
+    update_user_password(user["id"], salt, pw)
+    delete_sessions_for_user(user["id"])          # force re-login everywhere
+    return {"ok": True}
+
+
+@app.delete("/auth/me")
+def auth_delete_self(request: Request) -> dict:
+    """Delete your own account. The last admin can't leave the app orphaned."""
+    user = request.state.user
+    if user["role"] == "admin" and count_admins() <= 1:
+        raise HTTPException(
+            400,
+            "You're the only admin. Promote someone else first, "
+            "or delete the whole deployment.",
+        )
+    delete_sessions_for_user(user["id"])
+    delete_user(user["id"])
+    return {"ok": True}
+
+
+@app.post("/auth/wipe")
+def auth_wipe(request: Request) -> dict:
+    """Admin-only: delete all content. Accounts and connections survive."""
+    _require_admin(request)
+    from db import _conn
+    with _conn() as c:
+        for table in ("posts", "snapshots", "follower_snapshots",
+                      "notifications", "links", "clicks"):
+            c.execute(f"DELETE FROM {table}")
+    return {"ok": True}
 
 @app.get("/users")
 def users_list(request: Request) -> list[dict]:

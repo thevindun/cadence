@@ -96,3 +96,60 @@ export default function Settings() {
     </div>
   )
 }
+
+function AccountSection() {
+  const [cur, setCur] = useState('')
+  const [next, setNext] = useState('')
+  const [busy, setBusy] = useState(false)
+  const toast = useToast()
+
+  const changePassword = async () => {
+    setBusy(true)
+    try {
+      const res = await fetch(`${API}/auth/password`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ current_password: cur, new_password: next }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || 'Failed')
+      toast('Password changed — signing you out')
+      setTimeout(() => { logout(); location.reload() }, 1200)
+    } catch (e) { toast(e.message, 'err') } finally { setBusy(false) }
+  }
+
+  const deleteAccount = async () => {
+    if (!confirm('Delete your account permanently? This cannot be undone.')) return
+    const res = await fetch(`${API}/auth/me`, { method: 'DELETE' })
+    if (!res.ok) { toast((await res.json()).detail, 'err'); return }
+    logout(); location.reload()
+  }
+
+  return (
+    <section className="rounded-xl border border-line bg-surface p-5">
+      <p className="mb-4 font-mono text-xs tracking-wider text-muted">ACCOUNT</p>
+
+      <div className="flex flex-col gap-2">
+        <input type="password" value={cur} onChange={(e) => setCur(e.target.value)}
+          placeholder="Current password"
+          className="rounded-lg border border-line bg-elevated px-3 py-2 text-sm text-fg placeholder:text-muted outline-none focus:border-coral" />
+        <input type="password" value={next} onChange={(e) => setNext(e.target.value)}
+          placeholder="New password (8+ characters)"
+          className="rounded-lg border border-line bg-elevated px-3 py-2 text-sm text-fg placeholder:text-muted outline-none focus:border-coral" />
+        <button onClick={changePassword} disabled={busy || !cur || next.length < 8}
+          className="self-start rounded-lg bg-coral px-4 py-2 text-sm font-medium text-white transition disabled:opacity-40">
+          Change password
+        </button>
+      </div>
+
+      <div className="mt-6 border-t border-line pt-4">
+        <p className="mb-2 text-sm text-muted">
+          Deleting your account removes your login and sessions. Posts and connected
+          accounts belong to the workspace and are not removed.
+        </p>
+        <button onClick={deleteAccount}
+          className="rounded-lg border border-red-500/40 px-3 py-1.5 text-sm text-red-400 transition hover:bg-red-500/10">
+          Delete my account
+        </button>
+      </div>
+    </section>
+  )
+}

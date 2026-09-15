@@ -659,3 +659,13 @@ def set_settings(ws: str, data: dict) -> dict:
             (ws, json.dumps(data), int(time.time() * 1000)),
         )
     return data
+
+def update_user_password(uid: str, salt: str, password_hash: str):
+    with _conn() as c:
+        c.execute("UPDATE users SET salt = ?, password_hash = ? WHERE id = ?",
+                  (salt, password_hash, uid))
+
+
+def delete_sessions_for_user(uid: str):
+    with _conn() as c:
+        c.execute("DELETE FROM sessions WHERE user_id = ?", (uid,))
